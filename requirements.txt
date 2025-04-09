@@ -1,0 +1,5 @@
+requests
+ttkthemes
+groq
+customtkinter
+python-dotenv
