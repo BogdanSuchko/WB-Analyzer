@@ -51,6 +51,10 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.loading_label = None
         self.result_queue = None
         self.mode_var = ctk.StringVar(value="single")
+        
+        # Переменные для отдельных полей ввода товаров при сравнении
+        self.product_entries = []
+        self.product_frames = []
 
         # --- Шрифты ---
         # Централизованное определение шрифтов - хорошая практика
@@ -73,7 +77,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         self._setup_result_widgets()
 
         self.bind("<Button-1>", self._defocus)
-        self.mode_var.trace_add("write", self._update_url_placeholder)
+        self.mode_var.trace_add("write", self._update_input_mode)
 
         # Показать основной фрейм при запуске
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=15)
@@ -103,7 +107,19 @@ class ReviewAnalyzerApp(ctk.CTk):
         input_section_frame.bind("<Button-1>", self._defocus)
 
         self._create_mode_switcher(input_section_frame)
-        self._create_url_input(input_section_frame)
+        
+        # Контейнер для полей ввода
+        self.input_container = ctk.CTkFrame(content_frame, fg_color="transparent")
+        self.input_container.pack(fill=tk.X, padx=20, pady=(0, 15))
+        
+        # Создаем поле для одного товара (по умолчанию)
+        self._create_single_product_input(self.input_container)
+        
+        # Создаем контейнер для нескольких товаров (скрыт изначально)
+        self.multi_products_container = ctk.CTkFrame(self.input_container, fg_color="transparent")
+        
+        # Создаем форму для сравнения товаров (до 4 полей)
+        self._create_multi_products_input(self.multi_products_container)
 
         # Кнопка "Анализировать"
         button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
@@ -116,7 +132,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         ).pack(anchor=tk.CENTER)
 
         # Нижний колонтитул (подвал)
-        ctk.CTkLabel(self.main_frame, text="Анализ обычно занимает от 3 до 10 секунд (больше, если в режиме сравнения товаров)", font=self.fonts["footer"], text_color=SECONDARY_TEXT).pack(pady=(0, 5))
+        ctk.CTkLabel(self.main_frame, text="Анализ обычно занимает от 3 до 10 секунд", font=self.fonts["footer"], text_color=SECONDARY_TEXT).pack(pady=(0, 5))
 
     def _create_mode_switcher(self, parent):
         """Создает радиокнопки выбора режима."""
@@ -127,21 +143,94 @@ class ReviewAnalyzerApp(ctk.CTk):
         for i, (text, value) in enumerate(modes):
             ctk.CTkRadioButton(
                 mode_frame, text=text, variable=self.mode_var, value=value,
-                font=self.fonts["text"], text_color=TEXT_COLOR, fg_color=ACCENT_COLOR,
-                command=self._update_url_placeholder # Обновлять и при клике
+                font=self.fonts["text"], text_color=TEXT_COLOR, fg_color=ACCENT_COLOR
             ).pack(side=tk.LEFT, padx=(0, 15 if i == 0 else 0))
 
-    def _create_url_input(self, parent):
-        """Создает поле ввода URL/ID."""
-        ctk.CTkLabel(parent, text="Ссылка на товар или артикул", font=self.fonts["header"], anchor="w", text_color=TEXT_COLOR).pack(fill=tk.X, pady=(0, 8))
-        url_input_frame = ctk.CTkFrame(parent, fg_color=INPUT_BG, corner_radius=10)
+    def _create_single_product_input(self, parent):
+        """Создает поле ввода URL/ID для одного товара."""
+        self.single_product_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.single_product_frame.pack(fill=tk.X)
+        
+        ctk.CTkLabel(
+            self.single_product_frame, 
+            text="Ссылка на товар или артикул", 
+            font=self.fonts["header"], 
+            anchor="w", 
+            text_color=TEXT_COLOR
+        ).pack(fill=tk.X, pady=(0, 8))
+        
+        url_input_frame = ctk.CTkFrame(self.single_product_frame, fg_color=INPUT_BG, corner_radius=10)
         url_input_frame.pack(fill=tk.X)
+        
         self.url_input = CustomEntry(
             url_input_frame, height=40, border_width=0, fg_color="transparent",
-            text_color=TEXT_COLOR, font=self.fonts["text"]
+            text_color=TEXT_COLOR, font=self.fonts["text"], 
+            placeholder_text="Вставьте ссылку или артикул товара Wildberries"
         )
         self.url_input.pack(fill=tk.X, padx=10, pady=8)
-        self._update_url_placeholder() # Установить начальный плейсхолдер
+
+    def _create_multi_products_input(self, parent):
+        """Создает поля ввода для сравнения до 4 товаров."""
+        instruction_label = ctk.CTkLabel(
+            parent, 
+            text="Введите до 4 товаров для сравнения:", 
+            font=self.fonts["header"], 
+            anchor="w", 
+            text_color=TEXT_COLOR
+        )
+        instruction_label.pack(fill=tk.X, pady=(0, 10))
+        
+        # Создаем 4 поля для товаров
+        for i in range(4):
+            product_frame = ctk.CTkFrame(parent, fg_color="transparent")
+            product_frame.pack(fill=tk.X, pady=(0, 10))
+            
+            label_text = f"Товар {i+1}:"
+            ctk.CTkLabel(
+                product_frame, 
+                text=label_text, 
+                font=self.fonts["text"], 
+                width=70,
+                anchor="w", 
+                text_color=TEXT_COLOR
+            ).pack(side=tk.LEFT, padx=(0, 10))
+            
+            input_frame = ctk.CTkFrame(product_frame, fg_color=INPUT_BG, corner_radius=10)
+            input_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            
+            entry = CustomEntry(
+                input_frame, 
+                height=35, 
+                border_width=0, 
+                fg_color="transparent",
+                text_color=TEXT_COLOR, 
+                font=self.fonts["text"], 
+                placeholder_text=f"Ссылка или артикул товара {i+1}"
+            )
+            entry.pack(fill=tk.X, padx=10, pady=5)
+            
+            self.product_entries.append(entry)
+            self.product_frames.append(product_frame)
+
+    def _update_input_mode(self, *args):
+        """Обновляет режим ввода в зависимости от выбранного режима."""
+        is_multi = self.mode_var.get() == "multi"
+        
+        # Скрываем/показываем соответствующие поля ввода
+        if is_multi:
+            self.single_product_frame.pack_forget()
+            self.multi_products_container.pack(fill=tk.X)
+        else:
+            self.multi_products_container.pack_forget()
+            self.single_product_frame.pack(fill=tk.X)
+            
+        # Изменяем размер окна при переключении режимов
+        if is_multi:
+            current_width = self.winfo_width()
+            self.geometry(f"{current_width}x650")  # Увеличиваем высоту для режима сравнения
+        else:
+            current_width = self.winfo_width()
+            self.geometry(f"{current_width}x400")
 
     def _setup_result_widgets(self):
         """Создает все виджеты для экрана результатов."""
@@ -187,170 +276,207 @@ class ReviewAnalyzerApp(ctk.CTk):
              except (AttributeError, tk.TclError): # Обработать случаи, когда родительский виджет не существует или виджет уничтожен
                  self.focus_set()
 
-    def _update_url_placeholder(self, *args):
-        """Обновляет текст-плейсхолдер в поле ввода URL в зависимости от выбранного режима."""
-        if hasattr(self, 'url_input') and self.url_input.winfo_exists():
-            is_multi = self.mode_var.get() == "multi"
-            placeholder = "Вставьте ссылки или артикулы через запятую" if is_multi else "Вставьте ссылку или артикул товара Wildberries"
-            self.url_input.configure(placeholder_text=placeholder)
-
     def _update_title_wraplength(self, event=None):
         """Корректирует длину переноса строки метки заголовка результата в зависимости от ширины фрейма."""
         try:
             # Отступы padx по 25 с каждой стороны для метки заголовка
-            new_width = self.result_frame.winfo_width() - 50
-            if new_width < 100: new_width = 100 # Минимальная ширина переноса
-            if hasattr(self, 'product_title_label') and self.product_title_label.winfo_exists():
-                self.product_title_label.configure(wraplength=new_width)
-        except (tk.TclError, AttributeError):
-             pass # Игнорировать ошибки, если виджеты не существуют во время изменения размера
+            wraplength = self.result_frame.winfo_width() - 50
+            if wraplength > 0 and hasattr(self, 'product_title_label'):
+                self.product_title_label.configure(wraplength=wraplength)
+        except tk.TclError:
+            # Обработать случай, когда виджет уничтожен
+            pass
 
     def _set_result_text(self, text):
-        """Безопасно обновляет текстовое поле результата."""
-        if hasattr(self, 'result_text') and self.result_text.winfo_exists():
-            self.result_text.configure(state=tk.NORMAL)
-            self.result_text.delete("1.0", tk.END)
-            self.result_text.insert(tk.END, text)
-            self.result_text.configure(state=tk.DISABLED)
+        """Задает текст в результирующем текстовом поле."""
+        self.result_text.configure(state=tk.NORMAL)
+        self.result_text.delete("1.0", tk.END)
+        self.result_text.insert("1.0", text)
+        self.result_text.configure(state=tk.DISABLED)
 
     def go_back(self):
-        """Переключает с экрана результатов обратно на главный экран."""
+        """Возвращается на основной экран."""
         self.result_frame.pack_forget()
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=15)
-        if hasattr(self, 'url_input'): self.url_input.delete(0, tk.END)
-        self.title(APP_NAME)
-
+        self.geometry("900x650" if self.mode_var.get() == "multi" else "900x400")
+        
     def show_loading_screen(self, message="Анализируем отзывы...\nПожалуйста, подождите"):
-        """Отображает оверлей загрузки."""
-        self.main_frame.pack_forget()
-        if self.loading_frame and self.loading_frame.winfo_exists():
-            self.loading_frame.destroy() # Очистить предыдущий, если есть
-
-        self.loading_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.loading_frame.pack(fill=tk.BOTH, expand=True, padx=40, pady=40)
-
-        loading_card = ctk.CTkFrame(self.loading_frame, corner_radius=20, fg_color=CARD_COLOR)
-        loading_card.pack(fill=tk.BOTH, expand=True)
-
-        self.loading_label = ctk.CTkLabel(loading_card, text=message, font=self.fonts["result_title"], text_color=TEXT_COLOR)
-        self.loading_label.pack(expand=True, pady=20)
-
-        # Использование place для центрирования контейнера прогресс-бара может быть проще
-        progress_container = ctk.CTkFrame(loading_card, fg_color="transparent")
-        progress_container.pack(pady=(0, 30)) # Упаковать под меткой
-        # progress_container.place(relx=0.5, rely=0.8, anchor=tk.CENTER) # Альтернативное центрирование
-
-        progress = ctk.CTkProgressBar(progress_container, width=250, mode="indeterminate", height=8, corner_radius=4, fg_color="#3a3a3c", progress_color=ACCENT_COLOR)
-        progress.pack()
-        progress.start()
-
-        self.update_idletasks() # Гарантировать обновление UI
-        return self.loading_frame
+        """Показывает экран загрузки."""
+        # Создаем полупрозрачный оверлей поверх всего окна
+        loading_screen = tk.Toplevel(self)
+        loading_screen.title("")
+        loading_screen.geometry(f"{self.winfo_width()}x{self.winfo_height()}+{self.winfo_rootx()}+{self.winfo_rooty()}")
+        loading_screen.configure(bg="#1E1E1E")
+        loading_screen.attributes("-alpha", 0.95)  # Полупрозрачность
+        loading_screen.transient(self)  # Привязываем к родительскому окну
+        loading_screen.overrideredirect(True)  # Убираем рамку окна
+        loading_screen.resizable(False, False)
+        
+        # Добавляем все на экран загрузки
+        frame = tk.Frame(loading_screen, bg="#1E1E1E")
+        frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        
+        # Используем стандартный виджет Label с animated gif, т.к. ctk не поддерживает анимированные изображения
+        spinner_label = tk.Label(frame, bg="#1E1E1E", fg="#FFFFFF", font=('Arial', 20))
+        spinner_label.config(text="⚙️")
+        spinner_label.pack(pady=(0, 10))
+        
+        message_label = tk.Label(frame, text=message, fg="#FFFFFF", bg="#1E1E1E", font=('Arial', 12))
+        message_label.pack(pady=(0, 10))
+        
+        # Сохраняем для возможности обновления
+        self.loading_frame = frame
+        self.loading_label = message_label
+        
+        # Обновляем GUI и убеждаемся, что окно видимо перед вызовом grab_set
+        loading_screen.update()
+        
+        # Обернем вызов grab_set в try-except для безопасности
+        try:
+            # Даем немного времени на отрисовку окна
+            self.after(100, lambda: self._safely_grab_focus(loading_screen))
+        except Exception as e:
+            print(f"Предупреждение: Не удалось захватить фокус: {e}")
+        
+        return loading_screen
+        
+    def _safely_grab_focus(self, window):
+        """Безопасно захватывает фокус для окна, если оно видимо."""
+        try:
+            if window.winfo_exists() and window.winfo_viewable():
+                window.grab_set()
+        except tk.TclError as e:
+            print(f"Предупреждение: Не удалось захватить фокус: {e}")
 
     def _destroy_loading_screen(self, loading_screen):
-        """Безопасно уничтожает экран загрузки."""
-        if loading_screen and loading_screen.winfo_exists():
+        """Уничтожает экран загрузки."""
+        try:
             loading_screen.destroy()
-        self.loading_frame = None
-        self.loading_label = None
+            self.loading_frame = None
+            self.loading_label = None
+        except (tk.TclError, AttributeError):
+            # Обработать случай, когда окно уже уничтожено
+            pass
 
     def _check_groq_api_key(self):
-        """Проверяет наличие GROQ_API_KEY в .env."""
-        # Упрощенная проверка - просто посмотреть, загружен ли он
-        api_key = os.getenv("GROQ_API_KEY")
+        """Проверяет наличие API ключа Groq."""
+        api_key = os.environ.get("GROQ_API_KEY")
         if not api_key:
-             # Использовать self.after, чтобы убедиться, что главное окно готово перед показом предупреждения
-             self.after(100, lambda: messagebox.showwarning(
-                 "API ключ Groq",
-                 "API ключ Groq (GROQ_API_KEY) не найден в файле .env.\n"
-                 "Он необходим для работы ИИ-анализа.\n\n"
-                 "1. Получите ключ на console.groq.com\n"
-                 "2. Сохраните его в файле .env (GROQ_API_KEY=ваш_ключ)\n\n"
-                 "Без ключа анализ отзывов не будет работать."
-             ))
+            key_paths = [os.path.expanduser("~/.groq/api_key"), "./.groq_api_key", "./groq_api_key.txt"]
+            for path in key_paths:
+                if os.path.exists(path):
+                    try:
+                        with open(path, "r") as f:
+                            api_key = f.read().strip()
+                            if api_key:
+                                break
+                    except:
+                        pass
 
-    # --- Извлечение ID товара ---
+        if not api_key:
+            warning = (
+                "API ключ Groq не найден. Функции анализа будут недоступны.\n\n"
+                "Для использования необходимо:\n"
+                "1. Получить API ключ на сайте https://console.groq.com\n"
+                "2. Сохранить его в файле .env в формате GROQ_API_KEY=ваш_ключ"
+            )
+            messagebox.showwarning("Отсутствует API ключ", warning)
 
     @staticmethod
     def extract_product_id(url_or_id):
-        """Извлекает ID товара WB из строки (URL или прямой ID)."""
-        clean_input = url_or_id.strip()
-        # Приоритет числовым строкам (вероятно, прямой артикул)
-        if clean_input.isdigit() and len(clean_input) >= 5:
-            return clean_input
-
-        # Регулярные выражения для разных форматов URL
-        patterns = [
-            r"/catalog/(\d{5,})",    # https://www.wildberries.ru/catalog/12345678/detail.aspx
-            r"/product/(\d{5,})",    # https://www.wildberries.ru/product/12345678/detail.aspx (менее распространен?)
-            r"(?:nm|card)=(\d{5,})" # https://...detail.aspx?targetUrl=BP&size=...&card=12345678 или &nm=...
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, clean_input, re.IGNORECASE) # Добавлено игнорирование регистра
+        """
+        Извлекает идентификатор товара из URL или возвращает сам ID, если передана строка с цифрами.
+        
+        Args:
+            url_or_id: URL товара или его артикул
+            
+        Returns:
+            str: Идентификатор товара
+        """
+        # Если передан артикул (строка цифр), возвращаем его
+        if re.match(r'^\d+$', url_or_id.strip()):
+            return url_or_id.strip()
+        
+        # Если передан URL, извлекаем артикул
+        try:
+            # Для wildberries.ru/catalog/ID/detail.aspx
+            # Или для wildberries.ru/catalog/ID/
+            if "wildberries.ru/catalog/" in url_or_id:
+                pattern = r"wildberries\.ru/catalog/(\d+)"
+                match = re.search(pattern, url_or_id)
+                if match:
+                    return match.group(1)
+                
+            # Паттерн для прямых числовых идентификаторов из URL
+            pattern = r"\d{7,15}"  # Ищем 7+ цифр подряд
+            match = re.search(pattern, url_or_id)
             if match:
-                return match.group(1)
-        return None
-
-    # --- Организация анализа ---
+                return match.group(0)
+        except:
+            pass
+            
+        # Если не удалось извлечь, возвращаем исходную строку
+        return url_or_id.strip()
 
     def start_analysis(self):
-        """Инициирует анализ на основе ввода и режима."""
-        url_or_id_input = self.url_input.get().strip()
-        if not url_or_id_input:
-            messagebox.showerror("Ошибка", "Введите ссылку на товар или его артикул.")
-            return
-
-        mode = self.mode_var.get()
-        ids_to_analyze = []
-
-        if mode == "single":
-            product_id = self.extract_product_id(url_or_id_input)
-            if not product_id:
-                messagebox.showerror("Ошибка ID", f"Не удалось извлечь артикул из:\n'{url_or_id_input}'")
-                return
-            ids_to_analyze.append(product_id)
-        else: # режим сравнения
-            items = [item.strip() for item in url_or_id_input.split(',')]
-            for item in items:
-                if not item: continue
-                product_id = self.extract_product_id(item)
+        """Запускает процесс анализа отзывов."""
+        loading_screen = self.show_loading_screen()
+        
+        try:
+            self.result_queue = multiprocessing.Queue()
+            
+            # Определяем режим анализа
+            mode = self.mode_var.get()
+            
+            if mode == "single":
+                # Анализ одного товара
+                product_id = self.url_input.get().strip()
                 if not product_id:
-                    messagebox.showerror("Ошибка ID", f"Не удалось извлечь артикул из:\n'{item}'\n\nПроверьте все введенные ссылки/артикулы.")
-                    return # Остановиться, если какой-либо ID недействителен в режиме сравнения
-                ids_to_analyze.append(product_id)
-
-            if not ids_to_analyze:
-                messagebox.showerror("Ошибка", "Не введено ни одного корректного артикула/ссылки для сравнения.")
-                return
-            # Избегать дубликатов
-            ids_to_analyze = sorted(list(set(ids_to_analyze)))
-
-
-        if not ids_to_analyze: # Не должно произойти, исходя из проверок выше, но безопасность прежде всего
-             messagebox.showerror("Ошибка", "Не удалось определить товары для анализа.")
-             return
-
-        # --- Запуск процесса ---
-        self.result_queue = multiprocessing.Queue()
-        target_process = self.perform_analysis_process # По умолчанию - одиночный
-        process_args = (ids_to_analyze[0], self.result_queue) # Аргументы для одиночного
-        loading_message = f"Получаем информацию о товаре {ids_to_analyze[0]}..."
-
-        if len(ids_to_analyze) > 1:
-             target_process = self.perform_multiple_analysis_process
-             process_args = (ids_to_analyze, self.result_queue)
-             loading_message = f"Получаем информацию о товарах ({len(ids_to_analyze)})..."
-
-        loading_screen = self.show_loading_screen(loading_message)
-
-        analysis_process = multiprocessing.Process(
-            target=target_process,
-            args=process_args,
-            daemon=True
-        )
-        analysis_process.start()
-        self.after(100, self.check_analysis_results, loading_screen)
-
+                    self._destroy_loading_screen(loading_screen)
+                    messagebox.showerror("Ошибка", "Введите ссылку на товар или его артикул.")
+                    return
+                
+                # Извлекаем ID товара
+                product_id = self.extract_product_id(product_id)
+                
+                # Запускаем процесс анализа
+                process = multiprocessing.Process(
+                    target=self.perform_analysis_process,
+                    args=(product_id, self.result_queue)
+                )
+                process.daemon = True
+                process.start()
+                
+            else:
+                # Анализ нескольких товаров
+                product_ids = []
+                
+                # Собираем непустые товары из полей ввода
+                for entry in self.product_entries:
+                    product_id = entry.get().strip()
+                    if product_id:
+                        product_ids.append(self.extract_product_id(product_id))
+                
+                if len(product_ids) < 2:
+                    self._destroy_loading_screen(loading_screen)
+                    messagebox.showerror("Ошибка", "Введите минимум два товара для сравнения.")
+                    return
+                
+                # Запускаем процесс анализа нескольких товаров
+                process = multiprocessing.Process(
+                    target=self.perform_multiple_analysis_process,
+                    args=(product_ids, self.result_queue)
+                )
+                process.daemon = True
+                process.start()
+            
+            # После запуска процесса планируем проверку очереди результатов
+            self.after(100, lambda: self.check_analysis_results(loading_screen))
+            
+        except Exception as e:
+            self._destroy_loading_screen(loading_screen)
+            messagebox.showerror("Ошибка", f"Неизвестная ошибка: {str(e)}")
+            
     # --- Целевые функции мультипроцессинга (статические методы) ---
 
     @staticmethod
@@ -379,10 +505,22 @@ class ReviewAnalyzerApp(ctk.CTk):
         num_products = len(individual_analyses)
         if num_products < 2: return "" # Нельзя сравнить менее 2
 
-        prompt = f"Сравни следующие {num_products} товар{'а' if 2 <= num_products <= 4 else 'ов'} ({' и '.join(p['product_name'] for p in individual_analyses.values())}) на основе краткого анализа отзывов по каждому:\n\n"
+        # Извлекаем названия товаров (brand_name или product_name)
+        product_names = []
+        for data in individual_analyses.values():
+            full_name = data['product_name']
+            # Пытаемся извлечь brand_name из product_name (предполагая формат "Brand - Name")
+            parts = full_name.split(' - ')
+            brand_name = parts[0] if len(parts) > 1 else full_name
+            product_names.append(brand_name)
 
-        for i, (product_id, data) in enumerate(individual_analyses.items(), 1):
-            prompt += f"Товар {i}: {data['product_name']} (Артикул: {product_id})\n"
+        prompt = f"Сравни следующие {num_products} товар{'а' if 2 <= num_products <= 4 else 'ов'} ({', '.join(product_names)}) на основе краткого анализа отзывов по каждому:\n\n"
+
+        for product_id, data in individual_analyses.items():
+            full_name = data['product_name']
+            parts = full_name.split(' - ')
+            brand_name = parts[0] if len(parts) > 1 else full_name
+            prompt += f"{brand_name} (Артикул: {product_id})\n"
             prompt += f"Анализ отзывов:\n{data['analysis']}\n\n"
 
         # Общие инструкции по структуре
@@ -391,17 +529,16 @@ class ReviewAnalyzerApp(ctk.CTk):
 
 Структурируй свой ответ строго по следующему шаблону:
 """
-        # Добавить конкретные примеры в зависимости от количества товаров
         if num_products == 2:
-             prompt += """
-Товар 1 (Артикул: [номер]): [Краткое описание первого товара]
-Товар 2 (Артикул: [номер]): [Краткое описание второго товара]
+            prompt += f"""
+{product_names[0]} (Артикул: [номер]): [Краткое описание первого товара]
+{product_names[1]} (Артикул: [номер]): [Краткое описание второго товара]
 
 Основные плюсы и минусы:
-- Товар 1:
+- {product_names[0]}:
   Плюсы: [список]
   Минусы: [список]
-- Товар 2:
+- {product_names[1]}:
   Плюсы: [список]
   Минусы: [список]
 
@@ -409,30 +546,26 @@ class ReviewAnalyzerApp(ctk.CTk):
 [Сравни по 3-5 важным параметрам, релевантным для этих товаров]
 
 Рекомендации:
-[Для кого или для каких целей лучше подходит каждый товар. Избегай однозначного "лучше", если это не очевидно.]
+[Напиши развернутую рекомендацию, какой товар лучше выбрать и почему. Объясни, для каких целей и категорий покупателей каждый из товаров подходит больше. Укажи преимущества одного товара над другим. Дай четкий совет, какой товар является лучшим выбором по соотношению цена/качество или для конкретных потребностей. Твоя рекомендация должна быть подробной и включать минимум 5-7 предложений.]
 """
-        else: # 3+ товара
-            prompt += """
-Товар 1 (Артикул: [номер]): [краткое описание]
-Товар 2 (Артикул: [номер]): [краткое описание]
+        else: 
+            prompt += f"""
+{product_names[0]} (Артикул: [номер]): [краткое описание]
+{product_names[1]} (Артикул: [номер]): [краткое описание]
 ... (для всех товаров) ...
 
 Основные плюсы и минусы (для каждого товара):
-- Товар 1:
-  Плюсы: [список]
-  Минусы: [список]
-- Товар 2:
-  Плюсы: [список]
-  Минусы: [список]
-... (для всех товаров) ...
-
+"""
+            for name in product_names:
+                prompt += f"- {name}:\n  Плюсы: [список]\n  Минусы: [список]\n"
+            prompt += """
 Сравнительный анализ по параметрам:
 [Сравни все товары по 3-5 важным параметрам]
 
-Общие рекомендации:
-[Выдели сильные стороны каждого и для каких ситуаций/покупателей они могут подойти.]
+Рекомендации:
+[Напиши развернутую рекомендацию, какой товар лучше выбрать из всех представленных и почему. Дай конкретные советы о том, какой товар подходит для разных категорий покупателей и сценариев использования. Выдели явного лидера по соотношению цена/качество. Если есть товары, которые не рекомендуется покупать, явно укажи это с объяснением причин. Рекомендация должна быть подробной и включать минимум 5-7 предложений.]
 """
-        prompt += "\nСтрого придерживайся этой структуры. Не используй вводных фраз вроде 'Вот сравнение...' или заключений вроде 'Надеюсь, это поможет'. Без эмодзи."
+        prompt += "\nСтрого придерживайся этой структуры. Без эмодзи."
         return prompt
 
     @staticmethod
@@ -451,6 +584,18 @@ class ReviewAnalyzerApp(ctk.CTk):
             # Сообщить UI, что начинается анализ для этого товара
             result_queue.put({"type": "update_loading_analyze", "product_name": product_name})
             analysis = ReviewAnalyzer.analyze_reviews(reviews, product_name)
+            
+            # Проверка на наличие ошибки в тексте анализа
+            if analysis.startswith("Ошибка GitHub Models API:") or "tokens_limit_reached" in analysis:
+                error_msg = f"Ошибка при анализе товара '{product_name}': {analysis}"
+                result_queue.put({"type": "error_partial", "message": error_msg})
+                return f"""Не удалось выполнить анализ из-за ограничений API.
+
+Анализ товара '{product_name}' не выполнен из-за ограничения размера запроса.
+Ошибка: {analysis}
+
+Попробуйте снова позже или используйте другой API."""
+                
             return analysis
         except Exception as e:
             error_msg = f"Ошибка ИИ-анализа для {product_name} ({product_id}): {e}"
