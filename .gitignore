@@ -5,3 +5,5 @@ har_and_cookies
 !.env.example
 dist
 build
+main_linux.spec
+main_windows.spec
