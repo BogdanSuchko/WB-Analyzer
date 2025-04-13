@@ -1,7 +1,7 @@
 __pycache__
 .venv
 har_and_cookies
-# .env
+.env
 !.env.example
 build
 dist
