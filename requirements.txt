@@ -1,0 +1,7 @@
+customtkinter
+python-dotenv
+groq
+httpx
+azure-ai-inference
+requests
+aiohttp
