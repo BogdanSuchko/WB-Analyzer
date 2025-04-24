@@ -126,8 +126,8 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.minsize(700, 400)
 
         # --- Переменные состояния ---
-        self.loading_frame = None
-        self.loading_label = None
+        self.loading_overlay_frame = None # Фрейм для индикатора загрузки
+        self.loading_overlay_label = None # Метка внутри фрейма загрузки
         self.result_queue = None
         self.mode_var = ctk.StringVar(value="single")
         
@@ -147,6 +147,8 @@ class ReviewAnalyzerApp(ctk.CTk):
             "result_text": ctk.CTkFont(size=14),
             "footer": ctk.CTkFont(size=11),
             "back_button": ctk.CTkFont(size=13),
+            "loading_icon": ctk.CTkFont(size=30),
+            "loading_text": ctk.CTkFont(size=16),
         }
 
         # --- Инициализация ---
@@ -154,12 +156,13 @@ class ReviewAnalyzerApp(ctk.CTk):
         self._setup_frames()
         self._setup_main_widgets()
         self._setup_result_widgets()
+        self._setup_loading_overlay() # Создаем фрейм загрузки
 
         self.bind("<Button-1>", self._defocus)
         self.mode_var.trace_add("write", self._update_input_mode)
 
         # Показать основной фрейм при запуске
-        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=15)
+        self.main_frame.pack(expand=True, fill="both") # Показываем главный экран сначала
 
     # --- Основные методы настройки ---
 
@@ -167,7 +170,23 @@ class ReviewAnalyzerApp(ctk.CTk):
         """Создает основной фрейм и фрейм результатов."""
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.result_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.result_frame.bind("<Configure>", self._update_title_wraplength)
+        # Фрейм загрузки создается в _setup_loading_overlay
+
+    def _setup_loading_overlay(self):
+        """Создает виджеты для оверлея загрузки (скрыт по умолчанию)."""
+        self.loading_overlay_frame = ctk.CTkFrame(self, fg_color=CARD_COLOR, corner_radius=10)
+        # Не пакуем его сразу, он будет показан при необходимости
+
+        # Центральный фрейм внутри оверлея для вертикального центрирования
+        center_frame = ctk.CTkFrame(self.loading_overlay_frame, fg_color="transparent")
+        center_frame.place(relx=0.5, rely=0.5, anchor="center")
+
+        loading_icon_label = ctk.CTkLabel(center_frame, text="", font=self.fonts["loading_icon"], text_color=ACCENT_COLOR)
+        loading_icon_label.pack(pady=(0, 10))
+
+        self.loading_overlay_label = ctk.CTkLabel(center_frame, text="Анализ...", font=self.fonts["loading_text"], wraplength=300)
+        self.loading_overlay_label.pack()
+
 
     def _setup_main_widgets(self):
         """Создает все виджеты для главного экрана."""
@@ -376,68 +395,22 @@ class ReviewAnalyzerApp(ctk.CTk):
     def go_back(self):
         """Возвращается на основной экран."""
         self.result_frame.pack_forget()
-        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=15)
+        self.main_frame.pack(expand=True, fill="both") # Показываем главный экран
         self.geometry("900x650" if self.mode_var.get() == "multi" else "900x400")
         
-    def show_loading_screen(self, message="Анализируем отзывы...\nПожалуйста, подождите"):
-        """Показывает экран загрузки."""
-        # Создаем полупрозрачный оверлей поверх всего окна
-        loading_screen = tk.Toplevel(self)
-        loading_screen.title("")
-        loading_screen.geometry(f"{self.winfo_width()}x{self.winfo_height()}+{self.winfo_rootx()}+{self.winfo_rooty()}")
-        loading_screen.configure(bg="#1E1E1E")
-        loading_screen.attributes("-alpha", 0.95)  # Полупрозрачность
-        loading_screen.transient(self)  # Привязываем к родительскому окну
-        loading_screen.overrideredirect(True)  # Убираем рамку окна
-        loading_screen.resizable(False, False)
-        loading_screen.attributes("-topmost", True)
-        loading_screen.lift()
-        
-        # Добавляем все на экран загрузки
-        frame = tk.Frame(loading_screen, bg="#1E1E1E")
-        frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-        
-        # Используем стандартный виджет Label с animated gif, т.к. ctk не поддерживает анимированные изображения
-        spinner_label = tk.Label(frame, bg="#1E1E1E", fg="#FFFFFF", font=('Arial', 20))
-        spinner_label.config(text="⚙️")
-        spinner_label.pack(pady=(0, 10))
-        
-        message_label = tk.Label(frame, text=message, fg="#FFFFFF", bg="#1E1E1E", font=('Arial', 12))
-        message_label.pack(pady=(0, 10))
-        
-        # Сохраняем для возможности обновления
-        self.loading_frame = frame
-        self.loading_label = message_label
-        
-        # Обновляем GUI и убеждаемся, что окно видимо перед вызовом grab_set
-        loading_screen.update()
-        
-        # Обернем вызов grab_set в try-except для безопасности
-        try:
-            # Даем немного времени на отрисовку окна
-            self.after(100, lambda: self._safely_grab_focus(loading_screen))
-        except Exception as e:
-            print(f"Предупреждение: Не удалось захватить фокус: {e}")
-        
-        return loading_screen
-        
-    def _safely_grab_focus(self, window):
-        """Безопасно захватывает фокус для окна, если оно видимо."""
-        try:
-            if window.winfo_exists() and window.winfo_viewable():
-                window.grab_set()
-        except tk.TclError as e:
-            print(f"Предупреждение: Не удалось захватить фокус: {e}")
+    def _show_loading_overlay(self, message):
+        """Показывает оверлей загрузки с указанным сообщением."""
+        self.main_frame.pack_forget()
+        self.result_frame.pack_forget()
+        self.loading_overlay_label.configure(text=message)
+        self.loading_overlay_frame.pack(expand=True, fill="both", padx=20, pady=20)
+        self.update_idletasks() # Обновить GUI немедленно
 
-    def _destroy_loading_screen(self, loading_screen):
-        """Уничтожает экран загрузки."""
-        try:
-            loading_screen.destroy()
-            self.loading_frame = None
-            self.loading_label = None
-        except (tk.TclError, AttributeError):
-            # Обработать случай, когда окно уже уничтожено
-            pass
+
+    def _hide_loading_overlay(self):
+        """Скрывает оверлей загрузки."""
+        self.loading_overlay_frame.pack_forget()
+
 
     def _check_groq_api_key(self):
         """Проверяет наличие API ключа Groq."""
@@ -501,8 +474,10 @@ class ReviewAnalyzerApp(ctk.CTk):
 
     def start_analysis(self):
         """Запускает процесс анализа отзывов."""
-        loading_screen = self.show_loading_screen()
-        
+        # Показать экран загрузки ПЕРЕД запуском процесса
+        loading_message = "Анализируем отзывы...\nПожалуйста, подождите"
+        self._show_loading_overlay(loading_message)
+
         try:
             self.result_queue = multiprocessing.Queue()
             
@@ -513,7 +488,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                 # Анализ одного товара
                 product_id = self.url_input.get().strip()
                 if not product_id:
-                    self._destroy_loading_screen(loading_screen)
+                    self._hide_loading_overlay() # Скрыть загрузку при ошибке запуска процесса
                     messagebox.showerror("Ошибка", "Введите ссылку на товар или его артикул.")
                     return
                 
@@ -539,7 +514,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                         product_ids.append(self.extract_product_id(product_id))
                 
                 if len(product_ids) < 2:
-                    self._destroy_loading_screen(loading_screen)
+                    self._hide_loading_overlay() # Скрыть загрузку при ошибке запуска процесса
                     messagebox.showerror("Ошибка", "Введите минимум два товара для сравнения.")
                     return
                 
@@ -552,12 +527,14 @@ class ReviewAnalyzerApp(ctk.CTk):
                 process.start()
             
             # После запуска процесса планируем проверку очереди результатов
-            self.after(100, lambda: self.check_analysis_results(loading_screen))
+            self.after(100, lambda: self.check_analysis_results())
             
         except Exception as e:
-            self._destroy_loading_screen(loading_screen)
-            messagebox.showerror("Ошибка", f"Неизвестная ошибка: {str(e)}")
-            
+            self._hide_loading_overlay() # Скрыть загрузку при ошибке запуска процесса
+            detailed_error = traceback.format_exc()
+            print(f"Ошибка запуска процесса анализа: {e}\n{detailed_error}")
+            messagebox.showerror("Ошибка", f"Не удалось запустить процесс анализа:\n{e}")
+
     # --- Целевые функции мультипроцессинга (статические методы) ---
 
     @staticmethod
@@ -581,10 +558,44 @@ class ReviewAnalyzerApp(ctk.CTk):
             return None # Указать на неудачу для этого товара
 
     @staticmethod
+    def _get_single_analysis(product_data, result_queue):
+        """Выполняет ИИ-анализ отзывов одного товара."""
+        product_id = product_data["product_id"]
+        product_name = product_data["product_name"]
+        reviews = product_data["reviews"]
+
+        if not reviews:
+            return f"Для товара '{product_name}' ({product_id}) не найдено отзывов для анализа."
+
+        try:
+            if not hasattr(ReviewAnalyzer, 'analyze_reviews'):
+                 raise AttributeError("Метод 'analyze_reviews' не найден в ReviewAnalyzer.")
+            # Сообщить UI, что начинается анализ для этого товара
+            result_queue.put({"type": "update_loading_analyze", "product_name": product_name})
+            analysis = ReviewAnalyzer.analyze_reviews(reviews, product_name)
+            
+            # Проверка на наличие ошибки в тексте анализа
+            if analysis.startswith("Ошибка GitHub Models API:") or "tokens_limit_reached" in analysis:
+                error_msg = f"Ошибка при анализе товара '{product_name}': {analysis}"
+                result_queue.put({"type": "error_partial", "message": error_msg})
+                return f"""Не удалось выполнить анализ из-за ограничений API.
+
+Анализ товара '{product_name}' не выполнен из-за ограничения размера запроса.
+Ошибка: {analysis}
+
+Попробуйте снова позже или используйте другой API."""
+                
+            return analysis
+        except Exception as e:
+            error_msg = f"Ошибка ИИ-анализа для {product_name} ({product_id}): {e}"
+            result_queue.put({"type": "error_partial", "message": error_msg}) # Не фатальная ошибка
+            return f"Не удалось выполнить анализ для товара '{product_name}': Ошибка ({type(e).__name__})."
+
+    @staticmethod
     def _generate_comparison_prompt(individual_analyses):
         """Генерирует промпт для ИИ для сравнения нескольких товаров."""
         num_products = len(individual_analyses)
-        if num_products < 2: return "" # Нельзя сравнить менее 2
+        if num_products < 2: return "" # Должно произойти, только если < 2 анализов завершились успешно
 
         # Извлекаем названия товаров (brand_name или product_name)
         product_names = []
@@ -650,38 +661,15 @@ class ReviewAnalyzerApp(ctk.CTk):
         return prompt
 
     @staticmethod
-    def _get_single_analysis(product_data, result_queue):
-        """Выполняет ИИ-анализ отзывов одного товара."""
-        product_id = product_data["product_id"]
-        product_name = product_data["product_name"]
-        reviews = product_data["reviews"]
-
-        if not reviews:
-            return f"Для товара '{product_name}' ({product_id}) не найдено отзывов для анализа."
-
+    def _get_ai_response(prompt):
+        """Выполняет запрос ИИ для сравнения."""
         try:
-            if not hasattr(ReviewAnalyzer, 'analyze_reviews'):
-                 raise AttributeError("Метод 'analyze_reviews' не найден в ReviewAnalyzer.")
-            # Сообщить UI, что начинается анализ для этого товара
-            result_queue.put({"type": "update_loading_analyze", "product_name": product_name})
-            analysis = ReviewAnalyzer.analyze_reviews(reviews, product_name)
-            
-            # Проверка на наличие ошибки в тексте анализа
-            if analysis.startswith("Ошибка GitHub Models API:") or "tokens_limit_reached" in analysis:
-                error_msg = f"Ошибка при анализе товара '{product_name}': {analysis}"
-                result_queue.put({"type": "error_partial", "message": error_msg})
-                return f"""Не удалось выполнить анализ из-за ограничений API.
-
-Анализ товара '{product_name}' не выполнен из-за ограничения размера запроса.
-Ошибка: {analysis}
-
-Попробуйте снова позже или используйте другой API."""
-                
-            return analysis
+            if not hasattr(ReviewAnalyzer, '_get_ai_response'):
+                 raise AttributeError("Метод '_get_ai_response' не найден в ReviewAnalyzer.")
+            return ReviewAnalyzer._get_ai_response(prompt)
         except Exception as e:
-            error_msg = f"Ошибка ИИ-анализа для {product_name} ({product_id}): {e}"
-            result_queue.put({"type": "error_partial", "message": error_msg}) # Не фатальная ошибка
-            return f"Не удалось выполнить анализ для товара '{product_name}': Ошибка ({type(e).__name__})."
+            error_msg = f"Ошибка при получении ответа ИИ: {e}"
+            return f"Ошибка при получении ответа ИИ: {error_msg}"
 
     @staticmethod
     def perform_analysis_process(product_id, result_queue):
@@ -712,11 +700,11 @@ class ReviewAnalyzerApp(ctk.CTk):
         """Функция рабочего процесса для анализа и СРАВНЕНИЯ нескольких товаров."""
         try:
             # 1. Получение данных для всех товаров
-            products_data = []
+            products_data = {}
             for pid in product_ids:
                  data = ReviewAnalyzerApp._fetch_product_data(pid, result_queue)
                  if data: # Добавлять, только если получение данных прошло успешно
-                     products_data.append(data)
+                     products_data[pid] = data
                  # Если получение данных не удалось, ошибка уже отправлена через очередь
 
             if not products_data:
@@ -730,9 +718,9 @@ class ReviewAnalyzerApp(ctk.CTk):
 
             # 2. Выполнение индивидуальных анализов
             individual_analyses = {}
-            for p_data in products_data:
+            for pid, p_data in products_data.items():
                 analysis = ReviewAnalyzerApp._get_single_analysis(p_data, result_queue)
-                individual_analyses[p_data["product_id"]] = {
+                individual_analyses[pid] = {
                     "product_name": p_data["product_name"],
                     "analysis": analysis # Содержит сообщение об ошибке, если анализ не удался
                 }
@@ -745,21 +733,15 @@ class ReviewAnalyzerApp(ctk.CTk):
                  result_queue.put({"type": "error", "message": "Недостаточно данных для создания сравнения."})
                  return
 
-            try:
-                 if not hasattr(ReviewAnalyzer, '_get_ai_response'):
-                      raise AttributeError("Метод '_get_ai_response' не найден в ReviewAnalyzer.")
-                 comparison_analysis = ReviewAnalyzer._get_ai_response(comparison_prompt)
-                 product_names = [d["product_name"] for d in individual_analyses.values()]
-                 comparison_title = f"Сравнение: {', '.join(product_names)}"
+            comparison_analysis = ReviewAnalyzerApp._get_ai_response(comparison_prompt)
+            product_names = [d["product_name"] for d in individual_analyses.values()]
+            comparison_title = f"Сравнение: {', '.join(product_names)}"
 
-                 result_queue.put({
-                     "type": "result",
-                     "product_name": comparison_title, # Заголовок для экрана результатов
-                     "analysis": comparison_analysis
-                 })
-            except Exception as ai_error:
-                 error_details = traceback.format_exc()
-                 result_queue.put({"type": "error", "message": f"Ошибка при генерации сравнения ИИ:\n{ai_error}\n\nTraceback:\n{error_details}"})
+            result_queue.put({
+                "type": "result",
+                "product_name": comparison_title, # Заголовок для экрана результатов
+                "analysis": comparison_analysis
+            })
 
         except Exception as e:
             # Перехват всех неожиданных ошибок в многопроцессном режиме
@@ -769,57 +751,47 @@ class ReviewAnalyzerApp(ctk.CTk):
 
     # --- Обработка результатов (Проверка очереди из основного потока) ---
 
-    def check_analysis_results(self, loading_screen):
+    def check_analysis_results(self):
         """Периодически проверяет очередь результатов из процесса анализа."""
-        if not loading_screen or not loading_screen.winfo_exists():
-            return # Прекратить проверку, если экран загрузки исчез
-
         try:
             result = self.result_queue.get_nowait()
 
             # Обработать различные типы сообщений из очереди
             if result["type"] == "update_loading_fetch":
-                self._update_loading_text(f"Получаем данные: \"{result.get('product_name', '?')}\"...")
-                self.after(100, self.check_analysis_results, loading_screen) # Продолжить проверку
+                self.loading_overlay_label.configure(text=f"Получаем данные: \"{result.get('product_name', '?')}\"...")
+                self.after(100, self.check_analysis_results) # Продолжить проверку
             elif result["type"] == "update_loading_analyze":
-                 self._update_loading_text(f"Анализ ИИ: \"{result.get('product_name', '?')}\"...")
-                 self.after(100, self.check_analysis_results, loading_screen) # Продолжить проверку
+                 self.loading_overlay_label.configure(text=f"Анализ ИИ: \"{result.get('product_name', '?')}\"...")
+                 self.after(100, self.check_analysis_results) # Продолжить проверку
             elif result["type"] == "update_loading_compare":
-                 self._update_loading_text(f"Создаем сравнение для {result.get('count', '?')} товаров...")
-                 self.after(100, self.check_analysis_results, loading_screen) # Продолжить проверку
+                 self.loading_overlay_label.configure(text=f"Создаем сравнение для {result.get('count', '?')} товаров...")
+                 self.after(100, self.check_analysis_results) # Продолжить проверку
             elif result["type"] == "result":
-                 self._destroy_loading_screen(loading_screen)
+                 self._hide_loading_overlay() # Скрыть оверлей
                  self.show_results(result["product_name"], result["analysis"])
             elif result["type"] == "no_reviews":
-                 self._destroy_loading_screen(loading_screen)
+                 self._hide_loading_overlay() # Скрыть оверлей
                  self.show_no_reviews(result["product_name"])
             elif result["type"] == "error": # Фатальная ошибка
-                 self._destroy_loading_screen(loading_screen)
+                 self._hide_loading_overlay() # Скрыть оверлей
                  self.show_error_on_main_screen(result["message"])
             elif result["type"] == "error_partial": # Не фатальная, возможно, записать в лог?
                  print(f"ПРЕДУПРЕЖДЕНИЕ (не фатально): {result['message']}") # Записать в консоль
                  # Продолжить проверку для получения финального результата
-                 self.after(100, self.check_analysis_results, loading_screen)
+                 self.after(100, self.check_analysis_results)
 
         except multiprocessing.queues.Empty:
             # Очередь пуста, проверить позже
-            self.after(100, self.check_analysis_results, loading_screen)
+            self.after(100, self.check_analysis_results)
         except tk.TclError:
              # Экран загрузки мог быть неожиданно уничтожен
              print("Предупреждение: Окно загрузки исчезло во время проверки.")
              if not self.result_frame.winfo_ismapped(): self.go_back() # Попытаться восстановить состояние
         except Exception as e:
             # Перехватить неожиданные ошибки во время обработки результатов
-            self._destroy_loading_screen(loading_screen)
+            self._hide_loading_overlay() # Скрыть оверлей
             error_details = traceback.format_exc()
             self.show_error_on_main_screen(f"Критическая ошибка обработки результатов:\n{e}\n\nTraceback:\n{error_details}")
-
-    def _update_loading_text(self, text):
-         """Безопасно обновляет текст метки загрузки."""
-         if self.loading_label and self.loading_label.winfo_exists():
-             self.loading_label.configure(text=text)
-             self.update_idletasks()
-
 
     # --- Отображение финальных результатов/ошибок ---
 
