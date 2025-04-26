@@ -118,7 +118,7 @@ class WbReview:
                 return response.json()
         return None
 
-    def parse(self, only_this_variation=True, limit=100) -> List[str]:
+    def parse(self, only_this_variation=True, limit=300) -> List[str]:
         """
         Парсинг отзывов
         
