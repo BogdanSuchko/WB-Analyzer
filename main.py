@@ -351,15 +351,21 @@ class ReviewAnalyzerApp(ctk.CTk):
         )
         # Упаковывается при отображении одиночного результата
 
-        self.result_card = ctk.CTkFrame(self.single_result_container, corner_radius=15, fg_color=CARD_COLOR)
+        self.result_card = ctk.CTkFrame(self.single_result_container, corner_radius=15, fg_color=CARD_COLOR, border_width=2, border_color=ACCENT_COLOR)
         # Упаковывается при отображении одиночного результата
 
         self.result_text = ctk.CTkTextbox(
-            self.result_card, font=self.fonts["result_text"], wrap="word", fg_color="transparent",
-            text_color=TEXT_COLOR, corner_radius=0, border_width=0, border_spacing=10,
+            self.result_card,
+            font=self.fonts["result_text"],
+            wrap="word",
+            fg_color="transparent",
+            text_color=TEXT_COLOR,
+            # corner_radius=0, # Let it use default
+            border_width=0,
+            border_spacing=8, # Matched comparison style
             state=tk.DISABLED
         )
-        self.result_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5) # Внутри result_card
+        self.result_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10) # Increased padding
 
         # --- Контейнер для СРАВНИТЕЛЬНОГО АНАЛИЗА (КОЛОНКИ) --- 
         self.comparison_result_container = ctk.CTkFrame(self.result_frame, fg_color="transparent")
