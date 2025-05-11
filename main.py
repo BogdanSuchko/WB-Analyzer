@@ -141,6 +141,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.history_file_path = self._get_history_file_path() # <-- ДОБАВЛЕНО
         self._ensure_history_dir_exists() # <-- ДОБАВЛЕНО
         self._load_history_from_file() # <-- ДОБАВЛЕНО
+        self.viewing_from_history = False # <-- ФЛАГ ДЛЯ НАВИГАЦИИ ИЗ ИСТОРИИ
 
         # --- Шрифты ---
         # Централизованное определение шрифтов - хорошая практика
@@ -496,17 +497,22 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.result_text.configure(state=tk.DISABLED)
 
     def go_back(self):
-        """Возвращается на основной экран."""
-        if self.state() == 'zoomed': # Если было максимизировано
-            self.state('normal') # Вернуть в нормальное состояние
-        # self.attributes('-fullscreen', False) # Больше не используем
+        """Возвращается на основной экран или на экран истории."""
+        if self.state() == 'zoomed': 
+            self.state('normal')
+        
         self.result_frame.pack_forget()
-        self.single_result_container.pack_forget() # Скрываем контейнер одиночного результата
-        self.comparison_result_container.pack_forget() # Скрываем контейнер сравнения
-        self.history_frame.pack_forget() # <-- ДОБАВЛЕНО: скрываем историю при общем возврате
-        self.main_frame.pack(expand=True, fill="both")
-        self.geometry("900x650" if self.mode_var.get() == "multi" else "900x450") # <-- ИЗМЕНЕНО
-        self.title(APP_NAME) # Восстанавливаем исходный заголовок окна
+        self.single_result_container.pack_forget() 
+        self.comparison_result_container.pack_forget() 
+
+        if self.viewing_from_history:
+            self.viewing_from_history = False # Сбрасываем флаг
+            self.show_history_screen() # Возвращаемся на экран истории
+        else:
+            self.history_frame.pack_forget() # Скрываем историю, если вдруг была активна (маловероятно тут)
+            self.main_frame.pack(expand=True, fill="both")
+            self.geometry("900x650" if self.mode_var.get() == "multi" else "900x450") 
+            self.title(APP_NAME) 
         
     def _show_loading_overlay(self, message):
         """Показывает оверлей загрузки с указанным сообщением."""
@@ -584,6 +590,9 @@ class ReviewAnalyzerApp(ctk.CTk):
 
     def start_analysis(self):
         """Запускает процесс анализа отзывов."""
+        # Сбрасываем флаг просмотра из истории, так как это новый анализ
+        self.viewing_from_history = False
+        
         # Показать экран загрузки ПЕРЕД запуском процесса
         loading_message = "Анализируем отзывы...\nПожалуйста, подождите"
         self._show_loading_overlay(loading_message)
@@ -1233,6 +1242,7 @@ class ReviewAnalyzerApp(ctk.CTk):
     def _restore_analysis_from_history(self, history_entry):
         """Восстанавливает и отображает анализ из истории."""
         self.history_frame.pack_forget() # Скрываем экран истории
+        self.viewing_from_history = True # Устанавливаем флаг перед показом результатов из истории
 
         if history_entry['type'] == 'single':
             self.show_results(
