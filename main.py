@@ -331,8 +331,8 @@ class ReviewAnalyzerApp(ctk.CTk):
             self.geometry(f"{current_width}x400")
 
     def _setup_result_widgets(self):
-        """Создает все виджеты для экрана результатов."""
-        # Заголовок (Кнопка "Назад")
+        """Создает все виджеты для экрана результатов (для одиночного и сравнения)."""
+        # --- Общие элементы для обоих режимов --- 
         header_frame = ctk.CTkFrame(self.result_frame, fg_color="transparent")
         header_frame.pack(fill=tk.X, pady=(10, 5), padx=20)
         ctk.CTkButton(
@@ -341,20 +341,61 @@ class ReviewAnalyzerApp(ctk.CTk):
             text_color=TEXT_COLOR, hover_color="#4a4a4c"
         ).pack(side=tk.LEFT)
 
-        # Название товара (Создано, но упаковывается динамически)
+        # --- Контейнер для ОДИНОЧНОГО АНАЛИЗА --- 
+        self.single_result_container = ctk.CTkFrame(self.result_frame, fg_color="transparent")
+        # Этот контейнер будет упаковываться/распаковываться в show_results
+
         self.product_title_label = ctk.CTkLabel(
-            self.result_frame, text="", font=self.fonts["result_title"],
+            self.single_result_container, text="", font=self.fonts["result_title"],
             text_color=TEXT_COLOR, anchor='w', justify="left"
         )
+        # Упаковывается при отображении одиночного результата
 
-        # Карточка результата и текстовое поле (Созданы, но упаковываются динамически)
-        self.result_card = ctk.CTkFrame(self.result_frame, corner_radius=15, fg_color=CARD_COLOR)
+        self.result_card = ctk.CTkFrame(self.single_result_container, corner_radius=15, fg_color=CARD_COLOR)
+        # Упаковывается при отображении одиночного результата
+
         self.result_text = ctk.CTkTextbox(
             self.result_card, font=self.fonts["result_text"], wrap="word", fg_color="transparent",
             text_color=TEXT_COLOR, corner_radius=0, border_width=0, border_spacing=10,
             state=tk.DISABLED
         )
-        self.result_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5) # Текстовое поле упаковано внутри карточки
+        self.result_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5) # Внутри result_card
+
+        # --- Контейнер для СРАВНИТЕЛЬНОГО АНАЛИЗА (КОЛОНКИ) --- 
+        self.comparison_result_container = ctk.CTkFrame(self.result_frame, fg_color="transparent")
+        # Этот контейнер будет упаковываться/распаковываться в show_comparison_results
+
+        self.comparison_overall_title_label = ctk.CTkLabel(
+            self.comparison_result_container, text="", font=self.fonts["result_title"],
+            text_color=TEXT_COLOR, anchor='w', justify="left", wraplength=700 # Начальная длина переноса
+        )
+        # Упаковывается в show_comparison_results
+
+        self.columns_container_frame = ctk.CTkFrame(self.comparison_result_container, fg_color="transparent")
+        # Упаковывается в show_comparison_results, колонки добавляются динамически
+        
+        # Контейнер для рекомендаций (с карточным фоном)
+        self.recommendation_outer_container = ctk.CTkFrame(self.comparison_result_container, fg_color="transparent")
+        # Упаковывается в show_comparison_results
+
+        self.recommendation_card = ctk.CTkFrame(self.recommendation_outer_container, corner_radius=15, fg_color=CARD_COLOR, border_width=2, border_color=ACCENT_COLOR)
+        # Упаковывается внутри self.recommendation_outer_container
+        
+        self.recommendation_title_label = ctk.CTkLabel(
+            self.recommendation_card, text="🏆 Общие рекомендации и выводы:",
+            font=self.fonts["header"], text_color=ACCENT_COLOR, anchor='w', justify="left"
+        )
+        # Упаковывается внутри self.recommendation_card
+
+        self.recommendation_textbox = ctk.CTkTextbox(
+            self.recommendation_card, font=self.fonts["result_text"], wrap="word",
+            fg_color="transparent", text_color=TEXT_COLOR, corner_radius=0,
+            border_width=0, border_spacing=10, state=tk.DISABLED, height=200 # Начальная высота
+        )
+        # Упаковывается внутри self.recommendation_card
+        
+        # Список для хранения ссылок на виджеты колонок, чтобы их можно было очищать
+        self._dynamic_column_widgets = []
 
     # --- Взаимодействие с UI и вспомогательные функции ---
 
@@ -377,13 +418,20 @@ class ReviewAnalyzerApp(ctk.CTk):
     def _update_title_wraplength(self, event=None):
         """Корректирует длину переноса строки метки заголовка результата в зависимости от ширины фрейма."""
         try:
-            # Отступы padx по 25 с каждой стороны для метки заголовка
-            wraplength = self.result_frame.winfo_width() - 50
-            if wraplength > 0 and hasattr(self, 'product_title_label'):
-                self.product_title_label.configure(wraplength=wraplength)
+            # Для одиночного результата
+            if hasattr(self, 'product_title_label') and self.product_title_label.winfo_ismapped():
+                wraplength_single = self.single_result_container.winfo_width() - 50 # Используем ширину single_result_container
+                if wraplength_single > 0:
+                    self.product_title_label.configure(wraplength=wraplength_single)
+            
+            # Для сравнительного результата
+            if hasattr(self, 'comparison_overall_title_label') and self.comparison_overall_title_label.winfo_ismapped():
+                wraplength_compare = self.comparison_result_container.winfo_width() - 50 # Используем ширину comparison_result_container
+                if wraplength_compare > 0:
+                    self.comparison_overall_title_label.configure(wraplength=wraplength_compare)
+
         except tk.TclError:
-            # Обработать случай, когда виджет уничтожен
-            pass
+            pass # Виджет может быть уничтожен
 
     def _set_result_text(self, text):
         """Задает текст в результирующем текстовом поле."""
@@ -394,9 +442,15 @@ class ReviewAnalyzerApp(ctk.CTk):
 
     def go_back(self):
         """Возвращается на основной экран."""
+        if self.state() == 'zoomed': # Если было максимизировано
+            self.state('normal') # Вернуть в нормальное состояние
+        # self.attributes('-fullscreen', False) # Больше не используем
         self.result_frame.pack_forget()
-        self.main_frame.pack(expand=True, fill="both") # Показываем главный экран
+        self.single_result_container.pack_forget() # Скрываем контейнер одиночного результата
+        self.comparison_result_container.pack_forget() # Скрываем контейнер сравнения
+        self.main_frame.pack(expand=True, fill="both")
         self.geometry("900x650" if self.mode_var.get() == "multi" else "900x400")
+        self.title(APP_NAME) # Восстанавливаем исходный заголовок окна
         
     def _show_loading_overlay(self, message):
         """Показывает оверлей загрузки с указанным сообщением."""
@@ -565,7 +619,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         reviews = product_data["reviews"]
 
         if not reviews:
-            return f"Для товара '{product_name}' ({product_id}) не найдено отзывов для анализа."
+            return f"На текущий момент для товара «{product_name}» (арт. {product_id}) не найдено отзывов. К сожалению, без них анализ провести невозможно. Попробуйте проверить позже, возможно, они появятся!"
 
         try:
             if not hasattr(ReviewAnalyzer, 'analyze_reviews'):
@@ -592,72 +646,39 @@ class ReviewAnalyzerApp(ctk.CTk):
             return f"Не удалось выполнить анализ для товара '{product_name}': Ошибка ({type(e).__name__})."
 
     @staticmethod
-    def _generate_comparison_prompt(individual_analyses):
-        """Генерирует промпт для ИИ для сравнения нескольких товаров."""
-        num_products = len(individual_analyses)
-        if num_products < 2: return "" # Должно произойти, только если < 2 анализов завершились успешно
+    def _generate_comparison_prompt(individual_analyses_data):
+        """Генерирует промпт для ИИ для получения ОБЩИХ РЕКОМЕНДАЦИЙ по выбору между несколькими товарами,
+        предполагая, что их индивидуальные анализы уже известны и будут отображены отдельно."""
+        num_products = len(individual_analyses_data)
+        if num_products < 2: return ""
 
-        # Извлекаем названия товаров (brand_name или product_name)
-        product_names = []
-        for data in individual_analyses.values():
-            full_name = data['product_name']
-            # Пытаемся извлечь brand_name из product_name (предполагая формат "Brand - Name")
-            parts = full_name.split(' - ')
-            brand_name = parts[0] if len(parts) > 1 else full_name
-            product_names.append(brand_name)
+        product_info_for_prompt = []
+        for data in individual_analyses_data.values(): # individual_analyses_data это individual_analyses_map
+            product_info_for_prompt.append(
+                f"{data['product_name']} (количество реальных отзывов для анализа: {data.get('review_count', 'неизвестно')})"
+            )
+        
+        product_names_str = ", ".join(product_info_for_prompt)
 
-        prompt = f"Сравни следующие {num_products} товар{'а' if 2 <= num_products <= 4 else 'ов'} ({', '.join(product_names)}) на основе краткого анализа отзывов по каждому:\n\n"
+        prompt = f"Тебе предоставлены индивидуальные анализы для {num_products} товар{'а' if 2 <= num_products <= 4 else 'ов'}: {product_names_str}. Эти анализы будут показаны пользователю отдельно.\n\n"
+        prompt += "Твоя задача — на основе этих (невидимых тебе сейчас, но предполагаемых развернутых) индивидуальных анализов, а также УЧИТЫВАЯ КОЛИЧЕСТВО ОТЗЫВОВ для каждого товара, предоставить ТОЛЬКО ИТОГОВЫЕ ОБЩИЕ РЕКОМЕНДАЦИИ И ВЫВОДЫ для пользователя, который пытается выбрать между этими товарами.\n\n"
+        prompt += "ВАЖНЫЕ УКАЗАНИЯ:\n"
+        prompt += "- Если у товара очень мало отзывов (например, меньше 5) или в его индивидуальном анализе указано, что сделать выводы невозможно (например, из-за отсутствия или недостаточности данных), ЭТОТ ТОВАР НЕ МОЖЕТ БЫТЬ НАЗВАН 'ВЫБОРОМ РЕДАКЦИИ' И НЕ МОЖЕТ БЫТЬ РЕКОМЕНДОВАН КАК ЛУЧШИЙ. В таких случаях честно укажи на нехватку данных для уверенных выводов по этому товару.\n"
+        prompt += "- Твои рекомендации должны основываться на ДОСТОВЕРНОМ анализе. Не делай предположений или необоснованных выводов при недостатке данных.\n"
+        prompt += "- Если по всем товарам мало данных, так и укажи, что сделать однозначный выбор сложно.\n\n"
+        prompt += "Структурируй свой ответ СТРОГО по следующему шаблону:\n\n"
 
-        for product_id, data in individual_analyses.items():
-            full_name = data['product_name']
-            parts = full_name.split(' - ')
-            brand_name = parts[0] if len(parts) > 1 else full_name
-            prompt += f"{brand_name} (Артикул: {product_id})\n"
-            prompt += f"Анализ отзывов:\n{data['analysis']}\n\n"
+        prompt += "## 🏆 Итоговые рекомендации и вывод:\n\n"
+        prompt += "### 🔥 Выбор редакции (если есть явный лидер на основе ДОСТАТОЧНОГО количества отзывов и УВЕРЕННОГО анализа):\n"
+        prompt += "[Назови товар, который считаешь лучшим выбором. Обязательно УЧИТЫВАЙ КОЛИЧЕСТВО ОТЗЫВОВ и результаты индивидуального анализа. Если у товара мало отзывов или анализ был неубедительным, он НЕ МОЖЕТ быть выбором редакции. Если явного лидера нет или по всем товарам недостаточно данных, честно укажи это. Объясни свой выбор (3-4 предложения).]\n\n"
 
-        # Общие инструкции по структуре
-        prompt += """
-Твоя задача - провести объективное и структурированное сравнение.
+        prompt += "### ⚠️ Возможные компромиссы и предостережения:\n"
+        prompt += "[Укажи, на какие компромиссы придется пойти при выборе каждого из товаров, или какие у них есть недостатки, важные для определенных групп пользователей. Если для какого-то товара было мало отзывов, отметь это как риск или причину для осторожности.]\n\n"
 
-Структурируй свой ответ строго по следующему шаблону:
-"""
-        if num_products == 2:
-            prompt += f"""
-{product_names[0]} (Артикул: [номер]): [Краткое описание первого товара]
-{product_names[1]} (Артикул: [номер]): [Краткое описание второго товара]
-
-Основные плюсы и минусы:
-- {product_names[0]}:
-  Плюсы: [список]
-  Минусы: [список]
-- {product_names[1]}:
-  Плюсы: [список]
-  Минусы: [список]
-
-Сравнение по ключевым параметрам:
-[Сравни по 3-5 важным параметрам, релевантным для этих товаров]
-
-Рекомендации:
-[Напиши развернутую рекомендацию, какой товар лучше выбрать и почему. Объясни, для каких целей и категорий покупателей каждый из товаров подходит больше. Укажи преимущества одного товара над другим. Дай четкий совет, какой товар является лучшим выбором по соотношению цена/качество или для конкретных потребностей. Твоя рекомендация должна быть подробной и включать минимум 5-7 предложений.]
-"""
-        else: 
-            prompt += f"""
-{product_names[0]} (Артикул: [номер]): [краткое описание]
-{product_names[1]} (Артикул: [номер]): [краткое описание]
-... (для всех товаров) ...
-
-Основные плюсы и минусы (для каждого товара):
-"""
-            for name in product_names:
-                prompt += f"- {name}:\n  Плюсы: [список]\n  Минусы: [список]\n"
-            prompt += """
-Сравнительный анализ по параметрам:
-[Сравни все товары по 3-5 важным параметрам]
-
-Рекомендации:
-[Напиши развернутую рекомендацию, какой товар лучше выбрать из всех представленных и почему. Дай конкретные советы о том, какой товар подходит для разных категорий покупателей и сценариев использования. Выдели явного лидера по соотношению цена/качество. Если есть товары, которые не рекомендуется покупать, явно укажи это с объяснением причин. Рекомендация должна быть подробной и включать минимум 5-7 предложений.]
-"""
-        prompt += "\nСтрого придерживайся этой структуры. Без эмодзи."
+        prompt += "### 🤔 Для кого какой товар (с учетом количества отзывов):\n"
+        prompt += f"[Кратко, для каждого из {num_products} товаров ({', '.join([d['product_name'] for d in individual_analyses_data.values()])}), укажи, для какой основной цели или типа покупателя он лучше всего подходит. ЕСЛИ ДЛЯ ТОВАРА МАЛО ОТЗЫВОВ, ОБЯЗАТЕЛЬНО УПОМЯНИ ЭТОТ ФАКТ, например: '{individual_analyses_data[list(individual_analyses_data.keys())[0]]['product_name']} - может подойти для X, но отзывов пока мало для уверенности'. Дай оценку для всех товаров.]\n\n"
+        
+        prompt += "Пожалуйста, будь объективен. Без эмодзи. Не повторяй индивидуальные плюсы и минусы товаров, так как они будут показаны отдельно."
         return prompt
 
     @staticmethod
@@ -711,42 +732,73 @@ class ReviewAnalyzerApp(ctk.CTk):
                  result_queue.put({"type": "error", "message": "Не удалось получить данные ни для одного из указанных товаров."})
                  return
             if len(products_data) < 2 and len(product_ids) >= 2:
-                # Проверить, собирались ли мы сравнивать, но не удалось получить достаточно данных о товарах
                  result_queue.put({"type": "error", "message": f"Удалось получить данные только для {len(products_data)} из {len(product_ids)} товаров. Сравнение невозможно."})
-                 # Опционально: продолжить анализ одного полученного товара? Нет, просто выдать ошибку для сравнения.
                  return
 
             # 2. Выполнение индивидуальных анализов
-            individual_analyses = {}
+            individual_analyses_map = {} # Используем map для сохранения порядка и доступа по ID, если нужно
             for pid, p_data in products_data.items():
-                analysis = ReviewAnalyzerApp._get_single_analysis(p_data, result_queue)
-                individual_analyses[pid] = {
+                # Не отправляем update_loading_analyze из _get_single_analysis в UI,
+                # так как это будет выглядеть как много быстрых обновлений.
+                # Вместо этого, перед циклом можно отправить одно "Анализируем товары..."
+                # или после каждого анализа обновлять "Проанализировано X из Y..."
+                result_queue.put({"type": "update_loading_analyze_multi", "current": len(individual_analyses_map) + 1, "total": len(products_data), "product_name": p_data["product_name"]})
+                analysis_text = ReviewAnalyzerApp._get_single_analysis(p_data, result_queue) # result_queue передается для error_partial
+                individual_analyses_map[pid] = {
+                    "product_id": pid, # Добавим ID для возможного использования
                     "product_name": p_data["product_name"],
-                    "analysis": analysis # Содержит сообщение об ошибке, если анализ не удался
+                    "analysis": analysis_text, # Содержит сообщение об ошибке, если анализ не удался
+                    "review_count": p_data["review_count"]
                 }
+            
+            # Проверим, сколько анализов реально удалось получить (не содержат явных ошибок)
+            successful_analyses_list = [
+                data for data in individual_analyses_map.values()
+                if "Не удалось выполнить анализ" not in data["analysis"] and "не найдено отзывов" not in data["analysis"]
+            ]
 
-            # 3. Генерация промпта для сравнения и получение ответа ИИ
-            result_queue.put({"type": "update_loading_compare", "count": len(individual_analyses)})
-            comparison_prompt = ReviewAnalyzerApp._generate_comparison_prompt(individual_analyses)
+            if len(successful_analyses_list) < 2:
+                # Если после индивидуальных анализов осталось меньше двух успешных, сравнение не имеет смысла.
+                # Отправим результаты индивидуальных анализов (даже если они с ошибками)
+                # и сообщение, что сравнение невозможно.
+                # Это более сложный сценарий для UI, пока просто выдадим ошибку сравнения.
+                # TODO: Позже можно улучшить UI для показа частичных результатов.
+                result_queue.put({"type": "error", "message": f"Не удалось получить достаточно успешных индивидуальных анализов для {len(product_ids)} товаров. Сравнение невозможно."})
+                # Возможно, стоит передать individual_analyses_map, чтобы показать, что есть
+                # result_queue.put({
+                # "type": "multi_result_partial_failure",
+                # "comparison_title": f"Анализ товаров (сравнение не удалось)",
+                # "individual_product_analyses": list(individual_analyses_map.values()),
+                # "overall_recommendation": "Сравнение не удалось из-за ошибок при анализе отдельных товаров."
+                # })
+                return
 
-            if not comparison_prompt: # Должно произойти, только если < 2 анализов завершились успешно
-                 result_queue.put({"type": "error", "message": "Недостаточно данных для создания сравнения."})
+            # 3. Генерация промпта для ОБЩИХ РЕКОМЕНДАЦИЙ и получение ответа ИИ
+            result_queue.put({"type": "update_loading_compare", "count": len(successful_analyses_list)})
+            # Передаем individual_analyses_map (или successful_analyses_list) в _generate_comparison_prompt
+            # чтобы он мог использовать имена товаров в промпте.
+            comparison_prompt = ReviewAnalyzerApp._generate_comparison_prompt(individual_analyses_map)
+
+
+            if not comparison_prompt:
+                 result_queue.put({"type": "error", "message": "Недостаточно данных для создания общих рекомендаций."})
                  return
 
-            comparison_analysis = ReviewAnalyzerApp._get_ai_response(comparison_prompt)
-            product_names = [d["product_name"] for d in individual_analyses.values()]
-            comparison_title = f"Сравнение: {', '.join(product_names)}"
+            overall_recommendation_analysis = ReviewAnalyzerApp._get_ai_response(comparison_prompt)
+            
+            product_names_for_title = [d["product_name"] for d in individual_analyses_map.values()] # Используем все, даже если анализ неудачный для заголовка
+            comparison_title = f"Сравнение: {', '.join(product_names_for_title)}"
 
             result_queue.put({
-                "type": "result",
-                "product_name": comparison_title, # Заголовок для экрана результатов
-                "analysis": comparison_analysis
+                "type": "multi_result", # Новый тип результата
+                "comparison_title": comparison_title,
+                "individual_product_analyses": list(individual_analyses_map.values()), # Список словарей с индивидуальными анализами
+                "overall_recommendation": overall_recommendation_analysis
             })
 
         except Exception as e:
-            # Перехват всех неожиданных ошибок в многопроцессном режиме
             error_details = traceback.format_exc()
-            result_queue.put({"type": "error", "message": f"Критическая ошибка при сравнении товаров:\n{e}\n\nTraceback:\n{error_details}"})
+            result_queue.put({"type": "error", "message": f"Критическая ошибка при сравнении товаров:\\n{e}\\n\\nTraceback:\\n{error_details}"})
 
 
     # --- Обработка результатов (Проверка очереди из основного потока) ---
@@ -756,32 +808,35 @@ class ReviewAnalyzerApp(ctk.CTk):
         try:
             result = self.result_queue.get_nowait()
 
-            # Обработать различные типы сообщений из очереди
             if result["type"] == "update_loading_fetch":
                 self.loading_overlay_label.configure(text=f"Получаем данные: \"{result.get('product_name', '?')}\"...")
-                self.after(100, self.check_analysis_results) # Продолжить проверку
+                self.after(100, self.check_analysis_results)
             elif result["type"] == "update_loading_analyze":
                  self.loading_overlay_label.configure(text=f"Анализ ИИ: \"{result.get('product_name', '?')}\"...")
-                 self.after(100, self.check_analysis_results) # Продолжить проверку
+                 self.after(100, self.check_analysis_results)
+            elif result["type"] == "update_loading_analyze_multi":
+                 self.loading_overlay_label.configure(text=f"Анализируем товар {result.get('current','?')} из {result.get('total','?')}: \"{result.get('product_name', '?')}\"...")
+                 self.after(100, self.check_analysis_results)
             elif result["type"] == "update_loading_compare":
-                 self.loading_overlay_label.configure(text=f"Создаем сравнение для {result.get('count', '?')} товаров...")
-                 self.after(100, self.check_analysis_results) # Продолжить проверку
-            elif result["type"] == "result":
-                 self._hide_loading_overlay() # Скрыть оверлей
+                 self.loading_overlay_label.configure(text=f"Подготовка общих рекомендаций для {result.get('count', '?')} товаров...")
+                 self.after(100, self.check_analysis_results)
+            elif result["type"] == "result": # Одиночный анализ
+                 self._hide_loading_overlay()
                  self.show_results(result["product_name"], result["analysis"])
+            elif result["type"] == "multi_result": # Новый тип для сравнения
+                 self._hide_loading_overlay()
+                 self.show_comparison_results(result["comparison_title"], result["individual_product_analyses"], result["overall_recommendation"])
             elif result["type"] == "no_reviews":
-                 self._hide_loading_overlay() # Скрыть оверлей
+                 self._hide_loading_overlay()
                  self.show_no_reviews(result["product_name"])
-            elif result["type"] == "error": # Фатальная ошибка
-                 self._hide_loading_overlay() # Скрыть оверлей
+            elif result["type"] == "error":
+                 self._hide_loading_overlay()
                  self.show_error_on_main_screen(result["message"])
-            elif result["type"] == "error_partial": # Не фатальная, возможно, записать в лог?
-                 print(f"ПРЕДУПРЕЖДЕНИЕ (не фатально): {result['message']}") # Записать в консоль
-                 # Продолжить проверку для получения финального результата
+            elif result["type"] == "error_partial":
+                 print(f"ПРЕДУПРЕЖДЕНИЕ (не фатально): {result['message']}")
                  self.after(100, self.check_analysis_results)
 
         except multiprocessing.queues.Empty:
-            # Очередь пуста, проверить позже
             self.after(100, self.check_analysis_results)
         except tk.TclError:
              # Экран загрузки мог быть неожиданно уничтожен
@@ -796,32 +851,42 @@ class ReviewAnalyzerApp(ctk.CTk):
     # --- Отображение финальных результатов/ошибок ---
 
     def show_results(self, product_name, analysis):
-        """Отображает экран с результатами анализа."""
+        """Отображает экран с результатами анализа для ОДНОГО товара."""
+        if self.state() == 'zoomed': # Если было максимизировано
+            self.state('normal')
+        # self.attributes('-fullscreen', False) # Больше не используем
         if self.main_frame.winfo_ismapped(): self.main_frame.pack_forget()
+        if self.comparison_result_container.winfo_ismapped(): self.comparison_result_container.pack_forget()
+        
         self.result_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
+        self.single_result_container.pack(fill=tk.BOTH, expand=True) # Показываем контейнер для одиночного
 
-        self.title(f"Анализ: {product_name[:50]}{'...' if len(product_name)>50 else ''}") # Укоротить заголовок, если он слишком длинный
+        self.title(f"Анализ: {product_name[:50]}{'...' if len(product_name)>50 else ''}")
 
-        # Упаковать заголовок и карточку (только если еще не упакованы - может случиться при восстановлении после ошибки)
         if not self.product_title_label.winfo_ismapped():
              self.product_title_label.pack(pady=(15, 10), padx=25, fill=tk.X, anchor='n')
         if not self.result_card.winfo_ismapped():
              self.result_card.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 15))
 
-        self.product_title_label.configure(text=product_name) # Обновить текст
+        self.product_title_label.configure(text=product_name)
         self._set_result_text(analysis)
         self.update_idletasks()
-        self._update_title_wraplength() # Скорректировать перенос строк после упаковки/обновления
-        self.after(150, self._resize_window_based_on_content) # Изменить размер после небольшой задержки
+        self._update_title_wraplength() 
+        self.after(150, self._resize_window_based_on_content) 
 
     def show_no_reviews(self, product_name):
-        """Отображает сообщение о том, что отзывы не найдены."""
+        """Отображает сообщение о том, что отзывы не найдены (для одиночного товара)."""
+        if self.state() == 'zoomed': # Если было максимизировано
+            self.state('normal')
+        # self.attributes('-fullscreen', False) # Больше не используем
         if self.main_frame.winfo_ismapped(): self.main_frame.pack_forget()
+        if self.comparison_result_container.winfo_ismapped(): self.comparison_result_container.pack_forget()
+
         self.result_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
+        self.single_result_container.pack(fill=tk.BOTH, expand=True) # Показываем контейнер для одиночного
 
         self.title(f"Нет отзывов: {product_name[:50]}{'...' if len(product_name)>50 else ''}")
 
-        # Упаковать заголовок и карточку
         if not self.product_title_label.winfo_ismapped():
              self.product_title_label.pack(pady=(15, 10), padx=25, fill=tk.X, anchor='n')
         if not self.result_card.winfo_ismapped():
@@ -832,7 +897,93 @@ class ReviewAnalyzerApp(ctk.CTk):
         self._set_result_text(no_reviews_message)
         self.update_idletasks()
         self._update_title_wraplength()
-        # Обычно нет необходимости автоматически изменять размер для этого короткого сообщения
+
+    def show_comparison_results(self, overall_title, individual_analyses, overall_recommendation):
+        """Отображает экран с результатами сравнения в КОЛОНКАХ."""
+        if self.main_frame.winfo_ismapped(): self.main_frame.pack_forget()
+        if self.single_result_container.winfo_ismapped(): self.single_result_container.pack_forget()
+
+        self.result_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
+        self.comparison_result_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # self.attributes('-fullscreen', True) # Заменяем на максимизацию
+        if self.state() != 'zoomed': # Максимизировать, если еще не максимизировано
+            self.state('zoomed') 
+
+        self.title(f"{overall_title[:60]}{'...' if len(overall_title)>60 else ''}")
+        
+        # Общий заголовок сравнения
+        self.comparison_overall_title_label.pack(pady=(0, 10), padx=15, fill=tk.X, anchor='n')
+        self.comparison_overall_title_label.configure(text=overall_title)
+
+        # Очистка предыдущих колонок, если они были
+        for widget in self._dynamic_column_widgets:
+            widget.destroy()
+        self._dynamic_column_widgets = []
+
+        self.columns_container_frame.pack(fill=tk.BOTH, expand=True, pady=(0,10))
+
+        num_columns = len(individual_analyses)
+        if num_columns == 0: return # Не должно случиться, если логика в perform_multiple_analysis_process верна
+
+        for i, product_data in enumerate(individual_analyses):
+            column_frame = ctk.CTkFrame(self.columns_container_frame, border_width=2, border_color=ACCENT_COLOR, corner_radius=10, fg_color=CARD_COLOR)
+            column_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+            self._dynamic_column_widgets.append(column_frame) # Для последующей очистки
+
+            # Название товара в колонке
+            product_name_label = ctk.CTkLabel(column_frame, text=product_data["product_name"], font=self.fonts["header"], text_color=ACCENT_COLOR, wraplength=column_frame.winfo_width()-20)
+            product_name_label.pack(pady=(10, 5), padx=10, fill=tk.X)
+            # Динамическое обновление wraplength для заголовка колонки
+            def update_label_wraplength(event, label=product_name_label, frame=column_frame):
+                new_width = frame.winfo_width() - 20
+                if new_width > 0 : label.configure(wraplength=new_width)
+            column_frame.bind("<Configure>", lambda e, lbl=product_name_label, frm=column_frame: update_label_wraplength(e, lbl, frm), add="+")
+            
+            # Отзывов найдено (если есть)
+            review_count_val = product_data.get('review_count', 'N/A')
+            review_count_text = f"(Отзывов взято для анализа: {review_count_val})" if review_count_val != 'N/A' else ""
+            review_count_label = ctk.CTkLabel(column_frame, text=review_count_text, font=self.fonts["footer"], text_color=SECONDARY_TEXT)
+            review_count_label.pack(pady=(0,5), padx=10, fill=tk.X)
+
+            # Анализ товара в колонке
+            analysis_textbox = ctk.CTkTextbox(column_frame, wrap="word", font=self.fonts["result_text"], fg_color="transparent", activate_scrollbars=True, border_spacing=8)
+            analysis_textbox.pack(pady=(0,10), padx=10, fill=tk.BOTH, expand=True)
+            analysis_textbox.insert("1.0", product_data["analysis"])
+            analysis_textbox.configure(state=tk.DISABLED)
+        
+        # Контейнер для общих рекомендаций (сначала внешний, потом карточка)
+        self.recommendation_outer_container.pack(fill=tk.X, padx=0, pady=(5,0)) # padx=0 т.к. у comparison_result_container уже есть
+        self.recommendation_card.pack(fill=tk.X, expand=False, padx=5, pady=5) # padx для отступа от края outer_container
+        
+        # Заголовок рекомендаций
+        self.recommendation_title_label.pack(pady=(10,5), padx=15, fill=tk.X, anchor='w')
+
+        # Текст общих рекомендаций
+        self.recommendation_textbox.pack(pady=(0,10), padx=15, fill=tk.X, expand=False)
+        self.recommendation_textbox.configure(state=tk.NORMAL)
+        self.recommendation_textbox.delete("1.0", tk.END)
+        self.recommendation_textbox.insert("1.0", overall_recommendation)
+        self.recommendation_textbox.configure(state=tk.DISABLED)
+        
+        # Убедимся, что текстовое поле рекомендаций имеет достаточную высоту для содержимого,
+        # но не слишком большую. Можно попробовать задать высоту по содержимому или оставить как есть (с прокруткой).
+        self.recommendation_textbox.update_idletasks() # Обновить, чтобы получить актуальную высоту
+        # Пример: Установить высоту на основе количества строк, но не более X
+        # num_lines = int(self.recommendation_textbox.index('end-1c').split('.')[0])
+        # line_height = self.fonts["result_text"].cget("size") + 4
+        # desired_height = min(max(100, num_lines * line_height + 20), 300) # min 100, max 300
+        # self.recommendation_textbox.configure(height=desired_height)
+        # self.recommendation_card.configure(height=desired_height + 40) # + отступы и заголовок
+
+        self.update_idletasks()
+        self._update_title_wraplength() # Обновить перенос главного заголовка
+        # self.after(150, self._resize_window_based_on_content) # _resize_window_based_on_content нужно будет доработать для колонок
+        # Пока что установим больший размер окна для режима сравнения, если он активен
+        # if self.mode_var.get() == "multi": # Уже не нужно, так как будет фулскрин
+            # current_width = self.winfo_width()
+            # required_height = 700 # Примерная высота для режима сравнения
+            # self.geometry(f"{max(900, current_width)}x{required_height}")
 
     def show_error_on_main_screen(self, message):
         """Отображает окно с сообщением об ошибке, убедившись, что главный экран виден."""
