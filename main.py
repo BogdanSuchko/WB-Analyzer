@@ -7,6 +7,8 @@ import re
 import multiprocessing
 from dotenv import load_dotenv
 import traceback # Для подробного отчета об ошибках
+import datetime # <-- ДОБАВЛЕНО ДЛЯ ИСТОРИИ
+import json # <-- ДОБАВЛЕНО ДЛЯ СОХРАНЕНИЯ/ЗАГРУЗКИ ИСТОРИИ
 
 # --- Проверка зависимостей ---
 try:
@@ -122,7 +124,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         super().__init__()
 
         self.title(APP_NAME)
-        self.geometry("900x400")
+        self.geometry("900x450") # <-- ИЗМЕНЕНО
         self.minsize(700, 400)
 
         # --- Переменные состояния ---
@@ -134,6 +136,11 @@ class ReviewAnalyzerApp(ctk.CTk):
         # Переменные для отдельных полей ввода товаров при сравнении
         self.product_entries = []
         self.product_frames = []
+
+        self.analysis_history = [] # <-- ДОБАВЛЕНО ДЛЯ ИСТОРИИ
+        self.history_file_path = self._get_history_file_path() # <-- ДОБАВЛЕНО
+        self._ensure_history_dir_exists() # <-- ДОБАВЛЕНО
+        self._load_history_from_file() # <-- ДОБАВЛЕНО
 
         # --- Шрифты ---
         # Централизованное определение шрифтов - хорошая практика
@@ -156,6 +163,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         self._setup_frames()
         self._setup_main_widgets()
         self._setup_result_widgets()
+        self._setup_history_widgets() # <-- ДОБАВЛЕНО ДЛЯ ИСТОРИИ
         self._setup_loading_overlay() # Создаем фрейм загрузки
 
         self.bind("<Button-1>", self._defocus)
@@ -170,6 +178,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         """Создает основной фрейм и фрейм результатов."""
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.result_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.history_frame = ctk.CTkFrame(self, fg_color="transparent") # <-- ДОБАВЛЕНО ДЛЯ ИСТОРИИ
         # Фрейм загрузки создается в _setup_loading_overlay
 
     def _setup_loading_overlay(self):
@@ -227,6 +236,16 @@ class ReviewAnalyzerApp(ctk.CTk):
             button_frame, text="Анализировать отзывы", font=self.fonts["button"], width=250, height=45,
             command=self.start_analysis, corner_radius=10, fg_color=ACCENT_COLOR,
             hover_color="#0069d9", border_width=1, border_color="#1a94ff"
+        ).pack(anchor=tk.CENTER)
+
+        # Кнопка "История анализов"
+        history_button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        history_button_frame.pack(pady=(0, 10), fill=tk.X) # Немного меньше отступ сверху
+        history_button_frame.bind("<Button-1>", self._defocus)
+        ctk.CTkButton(
+            history_button_frame, text="История анализов", font=self.fonts["text"], # Шрифт поменьше
+            width=200, height=35, command=self.show_history_screen, corner_radius=8,
+            fg_color="#4a4a4c", hover_color="#5a5a5c", text_color=TEXT_COLOR
         ).pack(anchor=tk.CENTER)
 
         # Нижний колонтитул (подвал)
@@ -328,7 +347,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             self.geometry(f"{current_width}x650")  # Увеличиваем высоту для режима сравнения
         else:
             current_width = self.winfo_width()
-            self.geometry(f"{current_width}x400")
+            self.geometry(f"{current_width}x450") # <-- ИЗМЕНЕНО
 
     def _setup_result_widgets(self):
         """Создает все виджеты для экрана результатов (для одиночного и сравнения)."""
@@ -403,6 +422,36 @@ class ReviewAnalyzerApp(ctk.CTk):
         # Список для хранения ссылок на виджеты колонок, чтобы их можно было очищать
         self._dynamic_column_widgets = []
 
+    def _setup_history_widgets(self):
+        """Создает виджеты для экрана истории."""
+        # --- Общие элементы для экрана истории ---
+        history_header_frame = ctk.CTkFrame(self.history_frame, fg_color="transparent")
+        history_header_frame.pack(fill=tk.X, pady=(10, 5), padx=20)
+        
+        ctk.CTkButton(
+            history_header_frame, text="← Назад", font=self.fonts["back_button"], 
+            command=self.go_back_to_main_from_history, # Новая команда
+            width=100, height=32, corner_radius=16, fg_color="#3a3a3c",
+            text_color=TEXT_COLOR, hover_color="#4a4a4c"
+        ).pack(side=tk.LEFT)
+
+        history_title_label = ctk.CTkLabel(
+            self.history_frame, text="История анализов", font=self.fonts["result_title"],
+            text_color=TEXT_COLOR, anchor='center'
+        )
+        history_title_label.pack(pady=(5, 15), padx=20, fill=tk.X)
+
+        # Scrollable frame для элементов истории
+        self.history_scroll_frame = ctk.CTkScrollableFrame(self.history_frame, fg_color=CARD_COLOR, corner_radius=10)
+        self.history_scroll_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 15))
+        
+        # Начальное сообщение, если история пуста
+        self.no_history_label = ctk.CTkLabel(self.history_scroll_frame, 
+                                             text="История анализов пока пуста.",
+                                             font=self.fonts["text"], 
+                                             text_color=SECONDARY_TEXT)
+        # self.no_history_label.pack(pady=20) # Будет упаковано в _populate_history_list
+
     # --- Взаимодействие с UI и вспомогательные функции ---
 
     def _defocus(self, event=None):
@@ -454,8 +503,9 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.result_frame.pack_forget()
         self.single_result_container.pack_forget() # Скрываем контейнер одиночного результата
         self.comparison_result_container.pack_forget() # Скрываем контейнер сравнения
+        self.history_frame.pack_forget() # <-- ДОБАВЛЕНО: скрываем историю при общем возврате
         self.main_frame.pack(expand=True, fill="both")
-        self.geometry("900x650" if self.mode_var.get() == "multi" else "900x400")
+        self.geometry("900x650" if self.mode_var.get() == "multi" else "900x450") # <-- ИЗМЕНЕНО
         self.title(APP_NAME) # Восстанавливаем исходный заголовок окна
         
     def _show_loading_overlay(self, message):
@@ -898,8 +948,21 @@ class ReviewAnalyzerApp(ctk.CTk):
 
     # --- Отображение финальных результатов/ошибок ---
 
-    def show_results(self, product_name, analysis):
+    def show_results(self, product_name, analysis, from_history=False): # <-- ДОБАВЛЕН from_history
         """Отображает экран с результатами анализа для ОДНОГО товара."""
+        if not from_history:
+            # Сохраняем в историю только если это новый анализ
+            self.analysis_history.append({
+                'type': 'single',
+                'timestamp': datetime.datetime.now(),
+                'product_name': product_name,
+                'analysis': analysis
+            })
+            # Ограничение на размер истории (например, последние 20 записей)
+            if len(self.analysis_history) > 20:
+                self.analysis_history.pop(0) # Удаляем самый старый элемент
+            self._save_history_to_file() # <-- СОХРАНЯЕМ ИСТОРИЮ
+
         if self.state() == 'zoomed': # Если было максимизировано
             self.state('normal')
         # self.attributes('-fullscreen', False) # Больше не используем
@@ -924,6 +987,7 @@ class ReviewAnalyzerApp(ctk.CTk):
 
     def show_no_reviews(self, product_name):
         """Отображает сообщение о том, что отзывы не найдены (для одиночного товара)."""
+        # Анализы без отзывов не сохраняем в историю
         if self.state() == 'zoomed': # Если было максимизировано
             self.state('normal')
         # self.attributes('-fullscreen', False) # Больше не используем
@@ -946,8 +1010,22 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.update_idletasks()
         self._update_title_wraplength()
 
-    def show_comparison_results(self, overall_title, individual_analyses, overall_recommendation):
+    def show_comparison_results(self, overall_title, individual_analyses, overall_recommendation, from_history=False): # <-- ДОБАВЛЕН from_history
         """Отображает экран с результатами сравнения в КОЛОНКАХ."""
+        if not from_history:
+            # Сохраняем в историю только если это новый анализ
+            self.analysis_history.append({
+                'type': 'multi',
+                'timestamp': datetime.datetime.now(),
+                'comparison_title': overall_title,
+                'individual_product_analyses': individual_analyses, # Сохраняем полный набор данных
+                'overall_recommendation': overall_recommendation
+            })
+            # Ограничение на размер истории
+            if len(self.analysis_history) > 20:
+                self.analysis_history.pop(0)
+            self._save_history_to_file() # <-- СОХРАНЯЕМ ИСТОРИЮ
+
         if self.main_frame.winfo_ismapped(): self.main_frame.pack_forget()
         if self.single_result_container.winfo_ismapped(): self.single_result_container.pack_forget()
 
@@ -1077,6 +1155,191 @@ class ReviewAnalyzerApp(ctk.CTk):
 
         except (tk.TclError, AttributeError, ValueError) as e:
             print(f"Предупреждение: Не удалось автоматически изменить размер окна: {e}")
+
+    def go_back_to_main_from_history(self):
+        """Возвращается на основной экран с экрана истории."""
+        if self.state() == 'zoomed': self.state('normal')
+        self.history_frame.pack_forget()
+        self.main_frame.pack(expand=True, fill="both")
+        self.geometry("900x650" if self.mode_var.get() == "multi" else "900x450") # <-- ИЗМЕНЕНО # Восстанавливаем размер как при обычном возврате
+        self.title(APP_NAME)
+        
+    def _show_loading_overlay(self, message):
+        """Показывает оверлей загрузки с указанным сообщением."""
+        self.main_frame.pack_forget()
+        self.result_frame.pack_forget()
+        self.loading_overlay_label.configure(text=message)
+        self.loading_overlay_frame.pack(expand=True, fill="both", padx=20, pady=20)
+        self.update_idletasks() # Обновить GUI немедленно
+
+    def _hide_loading_overlay(self):
+        """Скрывает оверлей загрузки."""
+        self.loading_overlay_frame.pack_forget()
+
+    def show_history_screen(self):
+        """Отображает экран истории анализов."""
+        if self.state() == 'zoomed': self.state('normal')
+        self.main_frame.pack_forget()
+        self.result_frame.pack_forget() # Также скрываем экран результатов, если он был открыт
+        self.history_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
+        self.title(f"{APP_NAME} - История анализов")
+        self._populate_history_list() # Заполняем список при показе
+
+    def _populate_history_list(self):
+        """Заполняет/обновляет список элементов в scrollable frame истории."""
+        # Очищаем предыдущие элементы
+        for widget in self.history_scroll_frame.winfo_children():
+            widget.destroy()
+
+        if not self.analysis_history:
+            self.no_history_label = ctk.CTkLabel(self.history_scroll_frame,
+                                                 text="История анализов пока пуста.",
+                                                 font=self.fonts["text"],
+                                                 text_color=SECONDARY_TEXT)
+            self.no_history_label.pack(pady=20, padx=10, anchor="center")
+            return
+
+        # Показываем элементы в обратном порядке (новые сверху)
+        for i, entry in enumerate(reversed(self.analysis_history)):
+            item_frame = ctk.CTkFrame(self.history_scroll_frame, fg_color="#39393d", corner_radius=8) # Цвет чуть светлее карточки
+            item_frame.pack(fill=tk.X, pady=(5, 0) if i > 0 else (0,0), padx=5)
+
+            left_info_frame = ctk.CTkFrame(item_frame, fg_color="transparent")
+            left_info_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(10,5), pady=5)
+
+            entry_type_text = "Одиночный анализ" if entry['type'] == 'single' else "Сравнение товаров"
+            title_text = entry.get('product_name', entry.get('comparison_title', 'Без названия'))
+            
+            type_label = ctk.CTkLabel(left_info_frame, text=entry_type_text, font=self.fonts["header"], anchor="w", text_color=ACCENT_COLOR)
+            type_label.pack(fill=tk.X)
+
+            title_label_text = f"{title_text[:60]}{'...' if len(title_text)>60 else ''}"
+            title_label = ctk.CTkLabel(left_info_frame, text=title_label_text, font=self.fonts["text"], anchor="w", wraplength=450) # Ограничиваем длину
+            title_label.pack(fill=tk.X)
+            
+            timestamp_text = entry['timestamp'].strftime('%d.%m.%Y %H:%M:%S')
+            timestamp_label = ctk.CTkLabel(left_info_frame, text=timestamp_text, font=self.fonts["footer"], anchor="w", text_color=SECONDARY_TEXT)
+            timestamp_label.pack(fill=tk.X)
+
+            view_button = ctk.CTkButton(
+                item_frame, text="Посмотреть", font=self.fonts["back_button"], # Используем шрифт поменьше
+                width=120, height=30, corner_radius=6,
+                fg_color=ACCENT_COLOR, hover_color="#0069d9",
+                # Используем лямбду для передачи конкретного элемента истории
+                command=lambda e=entry: self._restore_analysis_from_history(e) 
+            )
+            view_button.pack(side=tk.RIGHT, padx=10, pady=10)
+            
+    def _restore_analysis_from_history(self, history_entry):
+        """Восстанавливает и отображает анализ из истории."""
+        self.history_frame.pack_forget() # Скрываем экран истории
+
+        if history_entry['type'] == 'single':
+            self.show_results(
+                product_name=history_entry['product_name'],
+                analysis=history_entry['analysis'],
+                from_history=True
+            )
+        elif history_entry['type'] == 'multi':
+            self.show_comparison_results(
+                overall_title=history_entry['comparison_title'],
+                individual_analyses=history_entry['individual_product_analyses'],
+                overall_recommendation=history_entry['overall_recommendation'],
+                from_history=True
+            )
+
+    def _get_history_file_path(self) -> str:
+        """Возвращает полный путь к файлу истории."""
+        home_path = os.path.expanduser("~") # Корректный способ получить домашнюю директорию
+        
+        # Стандартный путь к папке "Документы" на Windows
+        documents_folder_name = "Documents"
+        # На некоторых локализациях Windows папка может называться "Мои документы" 
+        # или иметь другое локализованное имя. Для простоты пока используем "Documents".
+        # Для более надежного кроссплатформенного решения можно использовать библиотеки типа `platformdirs`.
+        
+        documents_path = os.path.join(home_path, documents_folder_name)
+        
+        base_dir_for_app_data = documents_path
+        if not os.path.isdir(documents_path):
+            # Если папка "Документы" не найдена, используем домашнюю директорию как резервный вариант
+            print(f"Предупреждение: Папка '{documents_folder_name}' не найдена в '{home_path}'. История будет сохранена в домашней директории.")
+            base_dir_for_app_data = home_path 
+        
+        app_history_dir = os.path.join(base_dir_for_app_data, "WB-Analyzer")
+        return os.path.join(app_history_dir, "analysis_history.json")
+
+    def _ensure_history_dir_exists(self):
+        """Убеждается, что директория для файла истории существует."""
+        history_dir = os.path.dirname(self.history_file_path)
+        if not os.path.exists(history_dir):
+            try:
+                os.makedirs(history_dir)
+            except OSError as e:
+                print(f"Ошибка создания директории для истории: {e}")
+                # Можно показать messagebox, если критично, но пока просто выводим в консоль
+
+    def _load_history_from_file(self):
+        """Загружает историю анализов из файла."""
+        if not os.path.exists(self.history_file_path):
+            self.analysis_history = []
+            return
+        try:
+            with open(self.history_file_path, 'r', encoding='utf-8') as f:
+                loaded_data = json.load(f)
+                # Преобразуем строки времени обратно в datetime объекты
+                self.analysis_history = []
+                for item in loaded_data:
+                    try:
+                        item['timestamp'] = datetime.datetime.fromisoformat(item['timestamp'])
+                        self.analysis_history.append(item)
+                    except (TypeError, ValueError) as e_item:
+                        print(f"Ошибка разбора элемента истории (время): {e_item} - {item}")
+        except (json.JSONDecodeError, IOError, TypeError) as e:
+            print(f"Ошибка загрузки файла истории: {e}. Начинаем с пустой истории.")
+            self.analysis_history = [] # Начинаем с пустой истории в случае ошибки
+
+    def _save_history_to_file(self):
+        """Сохраняет текущую историю анализов в файл."""
+        try:
+            # Создаем копию для преобразования datetime в строки
+            history_to_save = []
+            for item in self.analysis_history:
+                saved_item = item.copy()
+                if isinstance(saved_item.get('timestamp'), datetime.datetime):
+                    saved_item['timestamp'] = saved_item['timestamp'].isoformat()
+                history_to_save.append(saved_item)
+            
+            with open(self.history_file_path, 'w', encoding='utf-8') as f:
+                json.dump(history_to_save, f, ensure_ascii=False, indent=4)
+        except IOError as e:
+            print(f"Ошибка сохранения файла истории: {e}")
+            # Можно показать messagebox пользователю
+            
+
+    def _check_groq_api_key(self):
+        """Проверяет наличие API ключа Groq."""
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            key_paths = [os.path.expanduser("~/.groq/api_key"), "./.groq_api_key", "./groq_api_key.txt"]
+            for path in key_paths:
+                if os.path.exists(path):
+                    try:
+                        with open(path, "r") as f:
+                            api_key = f.read().strip()
+                            if api_key:
+                                break
+                    except:
+                        pass
+
+        if not api_key:
+            warning = (
+                "API ключ Groq не найден. Функции анализа будут недоступны.\n\n"
+                "Для использования необходимо:\n"
+                "1. Получить API ключ на сайте https://console.groq.com\n"
+                "2. Сохранить его в файле .env в формате GROQ_API_KEY=ваш_ключ"
+            )
+            messagebox.showwarning("Отсутствует API ключ", warning)
 
 
 # --- Точка входа в приложение ---
