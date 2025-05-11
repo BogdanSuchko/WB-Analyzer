@@ -546,16 +546,17 @@ class ReviewAnalyzerApp(ctk.CTk):
             
             if mode == "single":
                 # Анализ одного товара
-                product_id = self.url_input.get().strip()
-                if not product_id:
+                product_id_input = self.url_input.get().strip()
+                if not product_id_input:
                     self._hide_loading_overlay() # Скрыть загрузку при ошибке запуска процесса
-                    messagebox.showerror("Ошибка", "Введите ссылку на товар или его артикул.")
+                    messagebox.showerror("Ошибка", "Введите ссылку на товар или его артикул.", parent=self)
                     return
                 
                 # Извлекаем ID товара
-                product_id = self.extract_product_id(product_id)
+                product_id = self.extract_product_id(product_id_input)
                 
                 # Запускаем процесс анализа
+                self._show_loading_overlay(f"Анализируем: {product_id_input[:30]}...") # Обновляем сообщение при старте
                 process = multiprocessing.Process(
                     target=self.perform_analysis_process,
                     args=(product_id, self.result_queue)
@@ -563,25 +564,66 @@ class ReviewAnalyzerApp(ctk.CTk):
                 process.daemon = True
                 process.start()
                 
-            else:
-                # Анализ нескольких товаров
-                product_ids = []
-                
-                # Собираем непустые товары из полей ввода
+            else: # Режим "multi" (сравнение)
+                product_ids_inputs = [] # Для хранения сырых введенных строк
+                product_ids_processed = [] # Для хранения обработанных (извлеченных) ID
+
                 for entry in self.product_entries:
-                    product_id = entry.get().strip()
-                    if product_id:
-                        product_ids.append(self.extract_product_id(product_id))
+                    product_input_raw = entry.get().strip()
+                    if product_input_raw:
+                        product_ids_inputs.append(product_input_raw)
+                        product_ids_processed.append(self.extract_product_id(product_input_raw))
                 
-                if len(product_ids) < 2:
-                    self._hide_loading_overlay() # Скрыть загрузку при ошибке запуска процесса
-                    messagebox.showerror("Ошибка", "Введите минимум два товара для сравнения.")
-                    return
+                if len(product_ids_processed) < 2:
+                    self._hide_loading_overlay() # Сначала скрываем оверлей
+                    # Теперь восстанавливаем главный экран, чтобы он был фоном для диалога
+                    self.main_frame.pack(expand=True, fill="both") 
+
+                    if len(product_ids_processed) == 1:
+                        actual_input_for_dialog = product_ids_inputs[0]
+                        id_to_analyze_single = product_ids_processed[0]
+
+                        user_choice = messagebox.askyesno(
+                            title="Сравнение товаров",
+                            message=f"Вы указали только один товар: \"{actual_input_for_dialog[:40]}{'...' if len(actual_input_for_dialog)>40 else ''}\" для сравнения.\n\nХотите проанализировать его в режиме 'Один товар'?",
+                            icon=messagebox.QUESTION,
+                            parent=self
+                        )
+                        if user_choice: # Пользователь выбрал "Да"
+                            self.mode_var.set("single")
+                            self.url_input.delete(0, tk.END)
+                            self.url_input.insert(0, id_to_analyze_single)
+                            # Снова показываем оверлей, так как сейчас начнется анализ
+                            self._show_loading_overlay(f"Анализируем: {actual_input_for_dialog[:30]}...")
+                            process = multiprocessing.Process(
+                                target=self.perform_analysis_process,
+                                args=(id_to_analyze_single, self.result_queue)
+                            )
+                            process.daemon = True
+                            process.start()
+                            self.after(100, lambda: self.check_analysis_results())
+                            return 
+                        else: # Пользователь выбрал "Нет"
+                            # main_frame уже восстановлен, просто выходим
+                            return
+                    else: # Меньше одного товара (0 валидных вводов)
+                        messagebox.showerror("Ошибка", "Введите минимум два товара для сравнения.", parent=self)
+                        # main_frame уже восстановлен, просто выходим
+                        return
                 
-                # Запускаем процесс анализа нескольких товаров
+                # Если товаров 2 или больше, продолжаем как обычно для сравнения
+                # В этом случае _show_loading_overlay был вызван в самом начале start_analysis
+                # и не скрывался, так что все корректно.
+                # Однако, для ясности и если бы мы меняли начальный вызов, можно было бы добавить его здесь:
+                # self._show_loading_overlay(f"Анализируем {len(product_ids_processed)} товаров для сравнения...")
+                # Но так как он УЖЕ показан в начале start_analysis и не был скрыт для этого пути, 
+                # можно просто обновить его текст, если нужно, или оставить как есть.
+                # Обновим текст для ясности, что именно происходит
+                self.loading_overlay_label.configure(text=f"Анализируем {len(product_ids_processed)} товаров для сравнения...")
+
                 process = multiprocessing.Process(
                     target=self.perform_multiple_analysis_process,
-                    args=(product_ids, self.result_queue)
+                    args=(product_ids_processed, self.result_queue) # Передаем обработанные ID
                 )
                 process.daemon = True
                 process.start()
