@@ -142,6 +142,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         self._ensure_history_dir_exists() # <-- ДОБАВЛЕНО
         self._load_history_from_file() # <-- ДОБАВЛЕНО
         self.viewing_from_history = False # <-- ФЛАГ ДЛЯ НАВИГАЦИИ ИЗ ИСТОРИИ
+        self.is_fullscreen = False # <-- ФЛАГ ДЛЯ ПОЛНОЭКРАННОГО РЕЖИМА
 
         # --- Шрифты ---
         # Централизованное определение шрифтов - хорошая практика
@@ -169,6 +170,7 @@ class ReviewAnalyzerApp(ctk.CTk):
 
         self.bind("<Button-1>", self._defocus)
         self.mode_var.trace_add("write", self._update_input_mode)
+        self.bind("<F11>", self._toggle_fullscreen) # <-- ДОБАВЛЕНО ДЛЯ F11
 
         # Показать основной фрейм при запуске
         self.main_frame.pack(expand=True, fill="both") # Показываем главный экран сначала
@@ -470,6 +472,19 @@ class ReviewAnalyzerApp(ctk.CTk):
                            self.focus_set()
              except (AttributeError, tk.TclError): # Обработать случаи, когда родительский виджет не существует или виджет уничтожен
                  self.focus_set()
+
+    def _toggle_fullscreen(self, event=None):
+        """Переключает полноэкранный режим окна."""
+        self.is_fullscreen = not self.is_fullscreen
+        self.attributes("-fullscreen", self.is_fullscreen)
+        # Если выходим из полноэкранного режима, и окно было 'zoomed', восстанавливаем 'normal'
+        # Это помогает избежать странного поведения с размерами после выхода из F11, если окно было максимизировано.
+        if not self.is_fullscreen and self.state() == 'zoomed':
+            self.state('normal')
+            # Можно добавить небольшую задержку и восстановить исходные размеры, если нужно,
+            # но пока оставим так для простоты.
+            # self.geometry("900x650" if self.mode_var.get() == "multi" else "900x450")
+
 
     def _update_title_wraplength(self, event=None):
         """Корректирует длину переноса строки метки заголовка результата в зависимости от ширины фрейма."""
