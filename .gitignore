@@ -9,3 +9,5 @@ main_linux.spec
 main_windows.spec
 WB Analyzer.spec
 .env.comp
+Output
+main.iss
