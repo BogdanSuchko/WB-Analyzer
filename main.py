@@ -438,6 +438,13 @@ class ReviewAnalyzerApp(ctk.CTk):
             text_color=TEXT_COLOR, hover_color="#4a4a4c"
         ).pack(side=tk.LEFT)
 
+        # Добавляем кнопку очистки истории
+        ctk.CTkButton(
+            history_header_frame, text="Очистить историю", font=self.fonts["back_button"],
+            command=self._clear_history, width=150, height=32, corner_radius=16,
+            fg_color="#e74c3c", hover_color="#c0392b", text_color=TEXT_COLOR
+        ).pack(side=tk.RIGHT)
+
         history_title_label = ctk.CTkLabel(
             self.history_frame, text="История анализов", font=self.fonts["result_title"],
             text_color=TEXT_COLOR, anchor='center'
@@ -454,6 +461,20 @@ class ReviewAnalyzerApp(ctk.CTk):
                                              font=self.fonts["text"], 
                                              text_color=SECONDARY_TEXT)
         # self.no_history_label.pack(pady=20) # Будет упаковано в _populate_history_list
+
+    def _clear_history(self):
+        """Очищает историю анализов после подтверждения."""
+        confirm = messagebox.askyesno(
+            title="Подтверждение очистки истории",
+            message="Вы действительно хотите удалить всю историю анализов?\nЭто действие нельзя будет отменить.",
+            icon=messagebox.WARNING,
+            parent=self
+        )
+        
+        if confirm:
+            self.analysis_history = []  # Очищаем список истории
+            self._save_history_to_file()  # Сохраняем пустой список в файл
+            self._populate_history_list()  # Обновляем отображение списка истории
 
     # --- Взаимодействие с UI и вспомогательные функции ---
 
