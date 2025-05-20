@@ -118,7 +118,7 @@ class WbReview:
                 return response.json()
         return None
 
-    def parse(self, only_this_variation=True, limit=300) -> List[str]:
+    def parse(self, only_this_variation=True, limit=300) -> List[Dict[str, str]]:
         """
         Парсинг отзывов
         
@@ -126,6 +126,9 @@ class WbReview:
             only_this_variation: Если True, возвращает отзывы только для этого варианта товара,
                                Если False, возвращает все отзывы для всех вариантов товара
             limit: Максимальное количество отзывов для возврата
+            
+        Returns:
+            List[Dict[str, str]]: Список словарей с полями 'text', 'pros', 'cons' для каждого отзыва
         """
         json_feedbacks = self.get_review_data()
         if not json_feedbacks:
@@ -133,11 +136,25 @@ class WbReview:
         
         if only_this_variation:
             # Возвращаем отзывы только для конкретного варианта товара (по артикулу)
-            feedbacks = [feedback.get("text") for feedback in json_feedbacks["feedbacks"]
-                        if str(feedback.get("nmId")) == self.sku]
+            feedbacks = [
+                {
+                    "text": feedback.get("text", ""),
+                    "pros": feedback.get("pros", ""),
+                    "cons": feedback.get("cons", "")
+                } 
+                for feedback in json_feedbacks["feedbacks"]
+                if str(feedback.get("nmId")) == self.sku
+            ]
         else:
             # Возвращаем все отзывы для всех вариантов товара
-            feedbacks = [feedback.get("text") for feedback in json_feedbacks["feedbacks"]]
+            feedbacks = [
+                {
+                    "text": feedback.get("text", ""),
+                    "pros": feedback.get("pros", ""),
+                    "cons": feedback.get("cons", "")
+                }
+                for feedback in json_feedbacks["feedbacks"]
+            ]
         
         if len(feedbacks) > limit:
             feedbacks = feedbacks[:limit]
