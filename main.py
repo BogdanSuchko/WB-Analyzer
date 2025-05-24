@@ -1266,14 +1266,25 @@ class ReviewAnalyzerApp(ctk.CTk):
             timestamp_label = ctk.CTkLabel(left_info_frame, text=timestamp_text, font=self.fonts["footer"], anchor="w", text_color=SECONDARY_TEXT)
             timestamp_label.pack(fill=tk.X)
 
+            buttons_frame = ctk.CTkFrame(item_frame, fg_color="transparent") # Фрейм для кнопок
+            buttons_frame.pack(side=tk.RIGHT, padx=10, pady=10)
+
             view_button = ctk.CTkButton(
-                item_frame, text="Посмотреть", font=self.fonts["back_button"], # Используем шрифт поменьше
-                width=120, height=30, corner_radius=6,
+                buttons_frame, text="Посмотреть", font=self.fonts["back_button"], # Используем шрифт поменьше
+                width=100, height=30, corner_radius=6, # Ширина чуть меньше
                 fg_color=ACCENT_COLOR, hover_color="#0069d9",
                 # Используем лямбду для передачи конкретного элемента истории
                 command=lambda e=entry: self._restore_analysis_from_history(e) 
             )
-            view_button.pack(side=tk.RIGHT, padx=10, pady=10)
+            view_button.pack(side=tk.LEFT, padx=(0, 5)) # Кнопка просмотра слева
+
+            delete_button = ctk.CTkButton(
+                buttons_frame, text="Удалить", font=self.fonts["back_button"],
+                width=80, height=30, corner_radius=6, # Ширина поменьше
+                fg_color="#e74c3c", hover_color="#c0392b", # Красный цвет для удаления
+                command=lambda e=entry: self._delete_history_entry(e)
+            )
+            delete_button.pack(side=tk.LEFT) # Кнопка удаления справа от просмотра
             
     def _restore_analysis_from_history(self, history_entry):
         """Восстанавливает и отображает анализ из истории."""
@@ -1293,6 +1304,34 @@ class ReviewAnalyzerApp(ctk.CTk):
                 overall_recommendation=history_entry['overall_recommendation'],
                 from_history=True
             )
+
+    def _delete_history_entry(self, entry_to_delete):
+        """Удаляет конкретную запись из истории анализов после подтверждения."""
+        title_text = entry_to_delete.get('product_name', entry_to_delete.get('comparison_title', 'Без названия'))
+        confirm_message = f"Вы действительно хотите удалить запись анализа для:\n'{title_text[:60]}{'...' if len(title_text)>60 else ''}'?"
+        
+        confirm = messagebox.askyesno(
+            title="Подтверждение удаления",
+            message=confirm_message,
+            icon=messagebox.WARNING,
+            parent=self # Убедимся, что диалог поверх основного окна
+        )
+        
+        if confirm:
+            try:
+                # Нам нужно найти и удалить элемент. Поскольку мы храним объекты,
+                # а не просто словари (datetime объекты), простое self.analysis_history.remove(entry_to_delete)
+                # может не сработать надежно, если объект был как-то изменен или пересоздан.
+                # Лучше найти по уникальному признаку, например, timestamp, если он уникален,
+                # или просто по идентичности объекта, если он передается напрямую.
+                # В данном случае entry_to_delete - это ссылка на элемент списка.
+                self.analysis_history.remove(entry_to_delete)
+                self._save_history_to_file()
+                self._populate_history_list() # Обновить отображение
+            except ValueError:
+                # Это может произойти, если элемент по какой-то причине уже удален или не найден
+                messagebox.showerror("Ошибка", "Не удалось найти элемент для удаления в истории.", parent=self)
+                self._populate_history_list() # Все равно обновить, на всякий случай
 
     def _get_history_file_path(self) -> str:
         """Возвращает полный путь к файлу истории."""
