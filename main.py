@@ -439,11 +439,13 @@ class ReviewAnalyzerApp(ctk.CTk):
         ).pack(side=tk.LEFT)
 
         # Добавляем кнопку очистки истории
-        ctk.CTkButton(
-            history_header_frame, text="Очистить историю", font=self.fonts["back_button"],
+        self.clear_history_button = ctk.CTkButton(
+            history_header_frame, text="Очистить всю историю", font=self.fonts["back_button"],
             command=self._clear_history, width=150, height=32, corner_radius=16,
-            fg_color="#e74c3c", hover_color="#c0392b", text_color=TEXT_COLOR
-        ).pack(side=tk.RIGHT)
+            fg_color="#e74c3c", hover_color="#c0392b", text_color=TEXT_COLOR,
+            text_color_disabled="#D3D3D3"  # Светло-серый для неактивного состояния
+        )
+        self.clear_history_button.pack(side=tk.RIGHT)
 
         history_title_label = ctk.CTkLabel(
             self.history_frame, text="История анализов", font=self.fonts["result_title"],
@@ -1242,7 +1244,11 @@ class ReviewAnalyzerApp(ctk.CTk):
                                                  font=self.fonts["text"],
                                                  text_color=SECONDARY_TEXT)
             self.no_history_label.pack(pady=20, padx=10, anchor="center")
+            if hasattr(self, 'clear_history_button'): # Проверка на случай раннего вызова
+                self.clear_history_button.configure(state=tk.DISABLED, fg_color="#808080") # Серый фон для неактивной кнопки
             return
+        elif hasattr(self, 'clear_history_button'): # Если история не пуста, кнопка активна
+             self.clear_history_button.configure(state=tk.NORMAL, fg_color="#e74c3c") # Возвращаем красный фон
 
         # Показываем элементы в обратном порядке (новые сверху)
         for i, entry in enumerate(reversed(self.analysis_history)):
