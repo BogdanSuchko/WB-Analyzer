@@ -418,7 +418,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.recommendation_textbox = ctk.CTkTextbox(
             self.recommendation_card, font=self.fonts["result_text"], wrap="word",
             fg_color="transparent", text_color=TEXT_COLOR, corner_radius=0,
-            border_width=0, border_spacing=10, state=tk.DISABLED, height=200 # Начальная высота
+            border_width=0, border_spacing=10, state=tk.DISABLED # Убираем height=200
         )
         # Упаковывается внутри self.recommendation_card
         
@@ -1121,19 +1121,19 @@ class ReviewAnalyzerApp(ctk.CTk):
 
             # Анализ товара в колонке
             analysis_textbox = ctk.CTkTextbox(column_frame, wrap="word", font=self.fonts["result_text"], fg_color="transparent", activate_scrollbars=True, border_spacing=8)
-            analysis_textbox.pack(pady=(0,10), padx=10, fill=tk.BOTH, expand=True)
+            analysis_textbox.pack(pady=(0,10), padx=10, fill=tk.BOTH, expand=True) # Возвращаем fill=tk.BOTH
             analysis_textbox.insert("1.0", product_data["analysis"])
             analysis_textbox.configure(state=tk.DISABLED)
         
         # Контейнер для общих рекомендаций (сначала внешний, потом карточка)
-        self.recommendation_outer_container.pack(fill=tk.X, padx=0, pady=(5,0)) # padx=0 т.к. у comparison_result_container уже есть
-        self.recommendation_card.pack(fill=tk.X, expand=False, padx=5, pady=5) # padx для отступа от края outer_container
+        self.recommendation_outer_container.pack(fill=tk.X, expand=False, padx=0, pady=(5,0)) # Изменено
+        self.recommendation_card.pack(fill=tk.X, expand=False, padx=5, pady=5) # Изменено
         
         # Заголовок рекомендаций
         self.recommendation_title_label.pack(pady=(10,5), padx=15, fill=tk.X, anchor='w')
 
         # Текст общих рекомендаций
-        self.recommendation_textbox.pack(pady=(0,10), padx=15, fill=tk.X, expand=False)
+        self.recommendation_textbox.pack(pady=(0,10), padx=15, fill=tk.X, expand=False) # Изменено
         self.recommendation_textbox.configure(state=tk.NORMAL)
         self.recommendation_textbox.delete("1.0", tk.END)
         self.recommendation_textbox.insert("1.0", overall_recommendation)
