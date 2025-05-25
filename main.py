@@ -130,6 +130,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         # --- Переменные состояния ---
         self.loading_overlay_frame = None # Фрейм для индикатора загрузки
         self.loading_overlay_label = None # Метка внутри фрейма загрузки
+        self.loading_progress_bar = None # <-- ДОБАВЛЕНО для прогресс-бара
         self.result_queue = None
         self.mode_var = ctk.StringVar(value="single")
         
@@ -199,6 +200,11 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.loading_overlay_label = ctk.CTkLabel(center_frame, text="Анализ...", font=self.fonts["loading_text"], wraplength=300)
         self.loading_overlay_label.pack()
 
+        # --- ДОБАВЛЕНИЕ ПРОГРЕСС-БАРА ---
+        self.loading_progress_bar = ctk.CTkProgressBar(center_frame, orientation="horizontal", mode="determinate", progress_color=ACCENT_COLOR)
+        self.loading_progress_bar.set(0) # Начальное значение
+        self.loading_progress_bar.pack(pady=(5, 20), padx=50, fill="x")
+        # --- КОНЕЦ ДОБАВЛЕНИЯ ПРОГРЕСС-БАРА ---
 
     def _setup_main_widgets(self):
         """Создает все виджеты для главного экрана."""
@@ -557,6 +563,8 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.main_frame.pack_forget()
         self.result_frame.pack_forget()
         self.loading_overlay_label.configure(text=message)
+        if self.loading_progress_bar: # Убедимся, что он уже создан
+            self.loading_progress_bar.set(0) # Сбрасываем прогресс-бар при каждом новом показе
         self.loading_overlay_frame.pack(expand=True, fill="both", padx=20, pady=20)
         self.update_idletasks() # Обновить GUI немедленно
 
@@ -743,7 +751,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             wb_review = WbReview(product_id)
             product_name = wb_review.product_name or f"Товар {product_id}"
             # Отправить обновление *перед* потенциально долгим парсингом
-            result_queue.put({"type": "update_loading_fetch", "product_name": product_name})
+            result_queue.put(("status_update", (0.1, f"Получаем данные для товара {product_id}...")))
             reviews = wb_review.parse(only_this_variation=True) # Предполагая, что это желаемое поведение
             return {
                 "product_id": product_id,
@@ -753,7 +761,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             }
         except Exception as e:
             error_msg = f"Ошибка при получении данных для товара {product_id}: {e}"
-            result_queue.put({"type": "error", "message": error_msg})
+            result_queue.put(("error", error_msg))
             return None # Указать на неудачу для этого товара
 
     @staticmethod
@@ -770,13 +778,13 @@ class ReviewAnalyzerApp(ctk.CTk):
             if not hasattr(ReviewAnalyzer, 'analyze_reviews'):
                  raise AttributeError("Метод 'analyze_reviews' не найден в ReviewAnalyzer.")
             # Сообщить UI, что начинается анализ для этого товара
-            result_queue.put({"type": "update_loading_analyze", "product_name": product_name})
+            result_queue.put(("status_update", (0.8, f"Анализируем отзывы для '{product_name}'...")))
             analysis = ReviewAnalyzer.analyze_reviews(reviews, product_name)
             
             # Проверка на наличие ошибки в тексте анализа
             if analysis.startswith("Ошибка GitHub Models API:") or "tokens_limit_reached" in analysis:
                 error_msg = f"Ошибка при анализе товара '{product_name}': {analysis}"
-                result_queue.put({"type": "error_partial", "message": error_msg})
+                result_queue.put(("error_partial", error_msg))
                 return f"""Не удалось выполнить анализ из-за ограничений API.
 
 Анализ товара '{product_name}' не выполнен из-за ограничения размера запроса.
@@ -787,7 +795,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             return analysis
         except Exception as e:
             error_msg = f"Ошибка ИИ-анализа для {product_name} ({product_id}): {e}"
-            result_queue.put({"type": "error_partial", "message": error_msg}) # Не фатальная ошибка
+            result_queue.put(("error_partial", error_msg)) # Не фатальная ошибка
             return f"Не удалось выполнить анализ для товара '{product_name}': Ошибка ({type(e).__name__})."
 
     @staticmethod
@@ -843,24 +851,23 @@ class ReviewAnalyzerApp(ctk.CTk):
         """Функция рабочего процесса для анализа ОДНОГО товара."""
         try:
             # 1. Получение данных
+            result_queue.put(("status_update", (0.2, f"Получаем данные для товара {product_id}...")))
             product_data = ReviewAnalyzerApp._fetch_product_data(product_id, result_queue)
             if not product_data: return # Ошибка уже отправлена получателем данных
 
             # 2. Выполнение анализа
+            result_queue.put(("status_update", (0.7, f"Анализируем отзывы для '{product_data['product_name']}'...")))
             analysis_result = ReviewAnalyzerApp._get_single_analysis(product_data, result_queue)
 
             # 3. Отправка финального результата
             result_type = "result" if product_data["reviews"] else "no_reviews"
-            result_queue.put({
-                "type": result_type,
-                "product_name": product_data["product_name"],
-                "analysis": analysis_result if result_type == "result" else f"У товара '{product_data['product_name']}' ({product_id}) нет отзывов."
-            })
+            result_queue.put(("status_update", (1.0, "Завершение анализа...")))
+            result_queue.put(("result", (product_data["product_name"], analysis_result if result_type == "result" else f"У товара '{product_data['product_name']}' ({product_id}) нет отзывов.")))
 
         except Exception as e:
             # Перехват всех неожиданных ошибок в одиночном процессе
             error_details = traceback.format_exc()
-            result_queue.put({"type": "error", "message": f"Критическая ошибка при анализе товара {product_id}:\n{e}\n\nTraceback:\n{error_details}"})
+            result_queue.put(("error", f"Критическая ошибка при анализе товара {product_id}:\n{e}\n\nTraceback:\n{error_details}"))
 
     @staticmethod
     def perform_multiple_analysis_process(product_ids, result_queue):
@@ -869,16 +876,19 @@ class ReviewAnalyzerApp(ctk.CTk):
             # 1. Получение данных для всех товаров
             products_data = {}
             for pid in product_ids:
+                 result_queue.put(("status_update", (0.1, f"Обработка товара {pid}...")))
                  data = ReviewAnalyzerApp._fetch_product_data(pid, result_queue)
                  if data: # Добавлять, только если получение данных прошло успешно
                      products_data[pid] = data
                  # Если получение данных не удалось, ошибка уже отправлена через очередь
 
             if not products_data:
-                 result_queue.put({"type": "error", "message": "Не удалось получить данные ни для одного из указанных товаров."})
+                 result_queue.put(("status_update", (0.9, "Недостаточно данных для сравнения.")))
+                 result_queue.put(("error", "Не удалось получить данные ни для одного из указанных товаров."))
                  return
             if len(products_data) < 2 and len(product_ids) >= 2:
-                 result_queue.put({"type": "error", "message": f"Удалось получить данные только для {len(products_data)} из {len(product_ids)} товаров. Сравнение невозможно."})
+                 result_queue.put(("status_update", (0.9, "Недостаточно данных для сравнения.")))
+                 result_queue.put(("error", f"Удалось получить данные только для {len(products_data)} из {len(product_ids)} товаров. Сравнение невозможно."))
                  return
 
             # 2. Выполнение индивидуальных анализов
@@ -888,7 +898,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                 # так как это будет выглядеть как много быстрых обновлений.
                 # Вместо этого, перед циклом можно отправить одно "Анализируем товары..."
                 # или после каждого анализа обновлять "Проанализировано X из Y..."
-                result_queue.put({"type": "update_loading_analyze_multi", "current": len(individual_analyses_map) + 1, "total": len(products_data), "product_name": p_data["product_name"]})
+                result_queue.put(("status_update", (0.7, f"Анализируем отзывы для '{p_data['product_name']}'...")))
                 analysis_text = ReviewAnalyzerApp._get_single_analysis(p_data, result_queue) # result_queue передается для error_partial
                 individual_analyses_map[pid] = {
                     "product_id": pid, # Добавим ID для возможного использования
@@ -909,7 +919,8 @@ class ReviewAnalyzerApp(ctk.CTk):
                 # и сообщение, что сравнение невозможно.
                 # Это более сложный сценарий для UI, пока просто выдадим ошибку сравнения.
                 # TODO: Позже можно улучшить UI для показа частичных результатов.
-                result_queue.put({"type": "error", "message": f"Не удалось получить достаточно успешных индивидуальных анализов для {len(product_ids)} товаров. Сравнение невозможно."})
+                result_queue.put(("status_update", (0.9, "Недостаточно данных для сравнения.")))
+                result_queue.put(("error", f"Не удалось получить достаточно успешных индивидуальных анализов для {len(product_ids)} товаров. Сравнение невозможно."))
                 # Возможно, стоит передать individual_analyses_map, чтобы показать, что есть
                 # result_queue.put({
                 # "type": "multi_result_partial_failure",
@@ -920,14 +931,15 @@ class ReviewAnalyzerApp(ctk.CTk):
                 return
 
             # 3. Генерация промпта для ОБЩИХ РЕКОМЕНДАЦИЙ и получение ответа ИИ
-            result_queue.put({"type": "update_loading_compare", "count": len(successful_analyses_list)})
+            result_queue.put(("status_update", (0.9, "Подготовка общего вывода...")))
             # Передаем individual_analyses_map (или successful_analyses_list) в _generate_comparison_prompt
             # чтобы он мог использовать имена товаров в промпте.
             comparison_prompt = ReviewAnalyzerApp._generate_comparison_prompt(individual_analyses_map)
 
 
             if not comparison_prompt:
-                 result_queue.put({"type": "error", "message": "Недостаточно данных для создания общих рекомендаций."})
+                 result_queue.put(("status_update", (0.9, "Недостаточно данных для сравнения.")))
+                 result_queue.put(("error", "Недостаточно данных для создания общих рекомендаций."))
                  return
 
             overall_recommendation_analysis = ReviewAnalyzerApp._get_ai_response(comparison_prompt)
@@ -935,64 +947,53 @@ class ReviewAnalyzerApp(ctk.CTk):
             product_names_for_title = [d["product_name"] for d in individual_analyses_map.values()] # Используем все, даже если анализ неудачный для заголовка
             comparison_title = f"Сравнение: {', '.join(product_names_for_title)}"
 
-            result_queue.put({
-                "type": "multi_result", # Новый тип результата
-                "comparison_title": comparison_title,
-                "individual_product_analyses": list(individual_analyses_map.values()), # Список словарей с индивидуальными анализами
-                "overall_recommendation": overall_recommendation_analysis
-            })
+            result_queue.put(("status_update", (1.0, "Завершение сравнения...")))
+            result_queue.put(("multi_result", (comparison_title, list(individual_analyses_map.values()), overall_recommendation_analysis)))
 
         except Exception as e:
             error_details = traceback.format_exc()
-            result_queue.put({"type": "error", "message": f"Критическая ошибка при сравнении товаров:\\n{e}\\n\\nTraceback:\\n{error_details}"})
-
+            result_queue.put(("error", f"Критическая ошибка при сравнении товаров:\\n{e}\\n\\nTraceback:\\n{error_details}"))
 
     # --- Обработка результатов (Проверка очереди из основного потока) ---
 
     def check_analysis_results(self):
         """Периодически проверяет очередь результатов из процесса анализа."""
         try:
-            result = self.result_queue.get_nowait()
+            while not self.result_queue.empty():
+                message_type, data = self.result_queue.get_nowait()
 
-            if result["type"] == "update_loading_fetch":
-                self.loading_overlay_label.configure(text=f"Получаем данные: \"{result.get('product_name', '?')}\"...")
-                self.after(100, self.check_analysis_results)
-            elif result["type"] == "update_loading_analyze":
-                 self.loading_overlay_label.configure(text=f"Анализ ИИ: \"{result.get('product_name', '?')}\"...")
-                 self.after(100, self.check_analysis_results)
-            elif result["type"] == "update_loading_analyze_multi":
-                 self.loading_overlay_label.configure(text=f"Анализируем товар {result.get('current','?')} из {result.get('total','?')}: \"{result.get('product_name', '?')}\"...")
-                 self.after(100, self.check_analysis_results)
-            elif result["type"] == "update_loading_compare":
-                 self.loading_overlay_label.configure(text=f"Подготовка общих рекомендаций для {result.get('count', '?')} товаров...")
-                 self.after(100, self.check_analysis_results)
-            elif result["type"] == "result": # Одиночный анализ
-                 self._hide_loading_overlay()
-                 self.show_results(result["product_name"], result["analysis"])
-            elif result["type"] == "multi_result": # Новый тип для сравнения
-                 self._hide_loading_overlay()
-                 self.show_comparison_results(result["comparison_title"], result["individual_product_analyses"], result["overall_recommendation"])
-            elif result["type"] == "no_reviews":
-                 self._hide_loading_overlay()
-                 self.show_no_reviews(result["product_name"])
-            elif result["type"] == "error":
-                 self._hide_loading_overlay()
-                 self.show_error_on_main_screen(result["message"])
-            elif result["type"] == "error_partial":
-                 print(f"ПРЕДУПРЕЖДЕНИЕ (не фатально): {result['message']}")
-                 self.after(100, self.check_analysis_results)
-
-        except multiprocessing.queues.Empty:
-            self.after(100, self.check_analysis_results)
-        except tk.TclError:
-             # Экран загрузки мог быть неожиданно уничтожен
-             print("Предупреждение: Окно загрузки исчезло во время проверки.")
-             if not self.result_frame.winfo_ismapped(): self.go_back() # Попытаться восстановить состояние
+                if message_type == "status_update":
+                    progress_value, status_text = data
+                    self.loading_overlay_label.configure(text=status_text)
+                    if self.loading_progress_bar:
+                        self.loading_progress_bar.set(float(progress_value)) # Устанавливаем прогресс
+                elif message_type == "result":
+                    self._hide_loading_overlay()
+                    product_name, analysis = data
+                    self.show_results(product_name, analysis)
+                elif message_type == "multi_result":
+                    self._hide_loading_overlay()
+                    title, individual_results, recommendation = data
+                    self.show_comparison_results(title, individual_results, recommendation)
+                elif message_type == "no_reviews":
+                    self._hide_loading_overlay()
+                    product_name = data
+                    self.show_no_reviews(product_name)
+                elif message_type == "error":
+                    self._hide_loading_overlay()
+                    error_message = data
+                    self.show_error_on_main_screen(error_message)
+                self.update_idletasks() # Обновляем GUI после каждого сообщения
+        except queue.Empty:
+            pass # Очередь пуста, ничего не делаем
         except Exception as e:
-            # Перехватить неожиданные ошибки во время обработки результатов
-            self._hide_loading_overlay() # Скрыть оверлей
-            error_details = traceback.format_exc()
-            self.show_error_on_main_screen(f"Критическая ошибка обработки результатов:\n{e}\n\nTraceback:\n{error_details}")
+            print(f"Ошибка в check_analysis_results: {e}")
+            self._hide_loading_overlay()
+            self.show_error_on_main_screen(f"Внутренняя ошибка обработки результатов: {e}")
+        finally:
+            # Продолжаем проверять очередь каждые 100 мс, если оверлей загрузки все еще виден
+            if self.loading_overlay_frame.winfo_ismapped():
+                self.after(100, self.check_analysis_results)
 
     # --- Отображение финальных результатов/ошибок ---
 
@@ -1199,6 +1200,8 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.main_frame.pack_forget()
         self.result_frame.pack_forget()
         self.loading_overlay_label.configure(text=message)
+        if self.loading_progress_bar: # Убедимся, что он уже создан
+            self.loading_progress_bar.set(0) # Сбрасываем прогресс-бар при каждом новом показе
         self.loading_overlay_frame.pack(expand=True, fill="both", padx=20, pady=20)
         self.update_idletasks() # Обновить GUI немедленно
 
@@ -1229,7 +1232,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                                                  text_color=SECONDARY_TEXT)
             self.no_history_label.pack(pady=20, padx=10, anchor="center")
             if hasattr(self, 'clear_history_button'): # Проверка на случай раннего вызова
-                self.clear_history_button.configure(state=tk.DISABLED, fg_color="#808080") # Серый фон для неактивной кнопки
+                self.clear_history_button.configure(state=tk.DISABLED, fg_color="#808080") # Серый фон для неактивного состояния
             return
         elif hasattr(self, 'clear_history_button'): # Если история не пуста, кнопка активна
              self.clear_history_button.configure(state=tk.NORMAL, fg_color="#e74c3c") # Возвращаем красный фон
