@@ -549,7 +549,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         else:
             self.history_frame.pack_forget() # Скрываем историю, если вдруг была активна (маловероятно тут)
             self.main_frame.pack(expand=True, fill="both")
-            self.geometry("900x650" if self.mode_var.get() == "multi" else "900x450") 
+            self.geometry("900x650" if self.mode_var.get() == "multi" else "900x450") # <-- ИЗМЕНЕНО # Восстанавливаем размер как при обычном возврате
             self.title(APP_NAME) 
         
     def _show_loading_overlay(self, message):
@@ -1080,17 +1080,14 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.result_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
         self.comparison_result_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # self.attributes('-fullscreen', True) # Заменяем на максимизацию
         if self.state() != 'zoomed': # Максимизировать, если еще не максимизировано
             self.state('zoomed') 
 
         self.title(f"{overall_title[:60]}{'...' if len(overall_title)>60 else ''}")
         
-        # Общий заголовок сравнения
         self.comparison_overall_title_label.pack(pady=(0, 10), padx=15, fill=tk.X, anchor='n')
         self.comparison_overall_title_label.configure(text=overall_title)
 
-        # Очистка предыдущих колонок, если они были
         for widget in self._dynamic_column_widgets:
             widget.destroy()
         self._dynamic_column_widgets = []
@@ -1098,66 +1095,51 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.columns_container_frame.pack(fill=tk.BOTH, expand=True, pady=(0,10))
 
         num_columns = len(individual_analyses)
-        if num_columns == 0: return # Не должно случиться, если логика в perform_multiple_analysis_process верна
+        if num_columns == 0: return
 
+        for i in range(4):
+            self.columns_container_frame.grid_columnconfigure(i, weight=0)
+
+        for i in range(num_columns):
+            self.columns_container_frame.grid_columnconfigure(i, weight=1, uniform="comp_cols") # <-- ДОБАВЛЕНО uniform
+        
+        self.columns_container_frame.grid_rowconfigure(0, weight=1)
+        
         for i, product_data in enumerate(individual_analyses):
             column_frame = ctk.CTkFrame(self.columns_container_frame, border_width=2, border_color=ACCENT_COLOR, corner_radius=10, fg_color=CARD_COLOR)
-            column_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-            self._dynamic_column_widgets.append(column_frame) # Для последующей очистки
+            column_frame.grid(row=0, column=i, sticky="nsew", padx=5, pady=5)
+            self._dynamic_column_widgets.append(column_frame) 
 
-            # Название товара в колонке
             product_name_label = ctk.CTkLabel(column_frame, text=product_data["product_name"], font=self.fonts["header"], text_color=ACCENT_COLOR, wraplength=column_frame.winfo_width()-20)
             product_name_label.pack(pady=(10, 5), padx=10, fill=tk.X)
-            # Динамическое обновление wraplength для заголовка колонки
             def update_label_wraplength(event, label=product_name_label, frame=column_frame):
                 new_width = frame.winfo_width() - 20
                 if new_width > 0 : label.configure(wraplength=new_width)
             column_frame.bind("<Configure>", lambda e, lbl=product_name_label, frm=column_frame: update_label_wraplength(e, lbl, frm), add="+")
             
-            # Отзывов найдено (если есть)
             review_count_val = product_data.get('review_count', 'N/A')
             review_count_text = f"(Отзывов взято для анализа: {review_count_val})" if review_count_val != 'N/A' else ""
             review_count_label = ctk.CTkLabel(column_frame, text=review_count_text, font=self.fonts["footer"], text_color=SECONDARY_TEXT)
             review_count_label.pack(pady=(0,5), padx=10, fill=tk.X)
 
-            # Анализ товара в колонке
             analysis_textbox = ctk.CTkTextbox(column_frame, wrap="word", font=self.fonts["result_text"], fg_color="transparent", activate_scrollbars=True, border_spacing=8)
-            analysis_textbox.pack(pady=(0,10), padx=10, fill=tk.BOTH, expand=True) # Возвращаем fill=tk.BOTH
+            analysis_textbox.pack(pady=(0,10), padx=10, fill=tk.BOTH, expand=True) 
             analysis_textbox.insert("1.0", product_data["analysis"])
             analysis_textbox.configure(state=tk.DISABLED)
         
-        # Контейнер для общих рекомендаций (сначала внешний, потом карточка)
-        self.recommendation_outer_container.pack(fill=tk.X, expand=False, padx=0, pady=(5,0)) # Изменено
-        self.recommendation_card.pack(fill=tk.X, expand=False, padx=5, pady=5) # Изменено
+        self.recommendation_outer_container.pack(fill=tk.X, expand=False, padx=0, pady=(5,0)) 
+        self.recommendation_card.pack(fill=tk.X, expand=False, padx=5, pady=5) 
         
-        # Заголовок рекомендаций
         self.recommendation_title_label.pack(pady=(10,5), padx=15, fill=tk.X, anchor='w')
 
-        # Текст общих рекомендаций
-        self.recommendation_textbox.pack(pady=(0,10), padx=15, fill=tk.X, expand=False) # Изменено
+        self.recommendation_textbox.pack(pady=(0,10), padx=15, fill=tk.X, expand=False) 
         self.recommendation_textbox.configure(state=tk.NORMAL)
         self.recommendation_textbox.delete("1.0", tk.END)
         self.recommendation_textbox.insert("1.0", overall_recommendation)
         self.recommendation_textbox.configure(state=tk.DISABLED)
         
-        # Убедимся, что текстовое поле рекомендаций имеет достаточную высоту для содержимого,
-        # но не слишком большую. Можно попробовать задать высоту по содержимому или оставить как есть (с прокруткой).
-        self.recommendation_textbox.update_idletasks() # Обновить, чтобы получить актуальную высоту
-        # Пример: Установить высоту на основе количества строк, но не более X
-        # num_lines = int(self.recommendation_textbox.index('end-1c').split('.')[0])
-        # line_height = self.fonts["result_text"].cget("size") + 4
-        # desired_height = min(max(100, num_lines * line_height + 20), 300) # min 100, max 300
-        # self.recommendation_textbox.configure(height=desired_height)
-        # self.recommendation_card.configure(height=desired_height + 40) # + отступы и заголовок
-
         self.update_idletasks()
-        self._update_title_wraplength() # Обновить перенос главного заголовка
-        # self.after(150, self._resize_window_based_on_content) # _resize_window_based_on_content нужно будет доработать для колонок
-        # Пока что установим больший размер окна для режима сравнения, если он активен
-        # if self.mode_var.get() == "multi": # Уже не нужно, так как будет фулскрин
-            # current_width = self.winfo_width()
-            # required_height = 700 # Примерная высота для режима сравнения
-            # self.geometry(f"{max(900, current_width)}x{required_height}")
+        self._update_title_wraplength() 
 
     def show_error_on_main_screen(self, message):
         """Отображает окно с сообщением об ошибке, убедившись, что главный экран виден."""
@@ -1224,6 +1206,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         """Скрывает оверлей загрузки."""
         self.loading_overlay_frame.pack_forget()
 
+
     def show_history_screen(self):
         """Отображает экран истории анализов."""
         if self.state() == 'zoomed': self.state('normal')
@@ -1242,7 +1225,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         if not self.analysis_history:
             self.no_history_label = ctk.CTkLabel(self.history_scroll_frame,
                                                  text="История анализов пока пуста.",
-                                                 font=self.fonts["text"],
+                                                 font=self.fonts["text"], 
                                                  text_color=SECONDARY_TEXT)
             self.no_history_label.pack(pady=20, padx=10, anchor="center")
             if hasattr(self, 'clear_history_button'): # Проверка на случай раннего вызова
