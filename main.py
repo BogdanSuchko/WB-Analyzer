@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import traceback 
 import datetime 
 import json
+import queue
 
 # --- Проверка зависимостей ---
 try:
@@ -1440,3 +1441,4 @@ if __name__ == "__main__":
              root.destroy()
         except Exception: 
              pass 
+
