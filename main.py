@@ -6,9 +6,9 @@ import os
 import re
 import multiprocessing
 from dotenv import load_dotenv
-import traceback # Для подробного отчета об ошибках
-import datetime # <-- ДОБАВЛЕНО ДЛЯ ИСТОРИИ
-import json # <-- ДОБАВЛЕНО ДЛЯ СОХРАНЕНИЯ/ЗАГРУЗКИ ИСТОРИИ
+import traceback 
+import datetime 
+import json
 
 # --- Проверка зависимостей ---
 try:
@@ -124,13 +124,13 @@ class ReviewAnalyzerApp(ctk.CTk):
         super().__init__()
 
         self.title(APP_NAME)
-        self.geometry("900x450") # <-- ИЗМЕНЕНО
+        self.geometry("900x450") 
         self.minsize(700, 400)
 
         # --- Переменные состояния ---
-        self.loading_overlay_frame = None # Фрейм для индикатора загрузки
-        self.loading_overlay_label = None # Метка внутри фрейма загрузки
-        self.loading_progress_bar = None # <-- ДОБАВЛЕНО для прогресс-бара
+        self.loading_overlay_frame = None 
+        self.loading_overlay_label = None 
+        self.loading_progress_bar = None 
         self.result_queue = None
         self.mode_var = ctk.StringVar(value="single")
         
@@ -138,12 +138,12 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.product_entries = []
         self.product_frames = []
 
-        self.analysis_history = [] # <-- ДОБАВЛЕНО ДЛЯ ИСТОРИИ
-        self.history_file_path = self._get_history_file_path() # <-- ДОБАВЛЕНО
-        self._ensure_history_dir_exists() # <-- ДОБАВЛЕНО
-        self._load_history_from_file() # <-- ДОБАВЛЕНО
-        self.viewing_from_history = False # <-- ФЛАГ ДЛЯ НАВИГАЦИИ ИЗ ИСТОРИИ
-        self.is_fullscreen = False # <-- ФЛАГ ДЛЯ ПОЛНОЭКРАННОГО РЕЖИМА
+        self.analysis_history = [] 
+        self.history_file_path = self._get_history_file_path() 
+        self._ensure_history_dir_exists() 
+        self._load_history_from_file() 
+        self.viewing_from_history = False 
+        self.is_fullscreen = False 
 
         # --- Шрифты ---
         # Централизованное определение шрифтов - хорошая практика
@@ -166,15 +166,15 @@ class ReviewAnalyzerApp(ctk.CTk):
         self._setup_frames()
         self._setup_main_widgets()
         self._setup_result_widgets()
-        self._setup_history_widgets() # <-- ДОБАВЛЕНО ДЛЯ ИСТОРИИ
-        self._setup_loading_overlay() # Создаем фрейм загрузки
+        self._setup_history_widgets() 
+        self._setup_loading_overlay() 
 
         self.bind("<Button-1>", self._defocus)
         self.mode_var.trace_add("write", self._update_input_mode)
-        self.bind("<F11>", self._toggle_fullscreen) # <-- ДОБАВЛЕНО ДЛЯ F11
+        self.bind("<F11>", self._toggle_fullscreen) 
 
         # Показать основной фрейм при запуске
-        self.main_frame.pack(expand=True, fill="both") # Показываем главный экран сначала
+        self.main_frame.pack(expand=True, fill="both") 
 
     # --- Основные методы настройки ---
 
@@ -182,7 +182,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         """Создает основной фрейм и фрейм результатов."""
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.result_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.history_frame = ctk.CTkFrame(self, fg_color="transparent") # <-- ДОБАВЛЕНО ДЛЯ ИСТОРИИ
+        self.history_frame = ctk.CTkFrame(self, fg_color="transparent") 
         # Фрейм загрузки создается в _setup_loading_overlay
 
     def _setup_loading_overlay(self):
@@ -202,7 +202,7 @@ class ReviewAnalyzerApp(ctk.CTk):
 
         # --- ДОБАВЛЕНИЕ ПРОГРЕСС-БАРА ---
         self.loading_progress_bar = ctk.CTkProgressBar(center_frame, orientation="horizontal", mode="determinate", progress_color=ACCENT_COLOR)
-        self.loading_progress_bar.set(0) # Начальное значение
+        self.loading_progress_bar.set(0) 
         self.loading_progress_bar.pack(pady=(5, 20), padx=50, fill="x")
         # --- КОНЕЦ ДОБАВЛЕНИЯ ПРОГРЕСС-БАРА ---
 
@@ -215,7 +215,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         # Карточка контента
         content_frame = ctk.CTkFrame(self.main_frame, fg_color=CARD_COLOR, corner_radius=15)
         content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=5)
-        content_frame.bind("<Button-1>", self._defocus) # Разрешить снятие фокуса по клику на фон карточки
+        content_frame.bind("<Button-1>", self._defocus) 
 
         # Секция ввода (Режим + URL)
         input_section_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
@@ -249,10 +249,10 @@ class ReviewAnalyzerApp(ctk.CTk):
 
         # Кнопка "История анализов"
         history_button_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
-        history_button_frame.pack(pady=(0, 10), fill=tk.X) # Немного меньше отступ сверху
+        history_button_frame.pack(pady=(0, 10), fill=tk.X) 
         history_button_frame.bind("<Button-1>", self._defocus)
         ctk.CTkButton(
-            history_button_frame, text="История анализов", font=self.fonts["text"], # Шрифт поменьше
+            history_button_frame, text="История анализов", font=self.fonts["text"], 
             width=200, height=35, command=self.show_history_screen, corner_radius=8,
             fg_color="#4a4a4c", hover_color="#5a5a5c", text_color=TEXT_COLOR
         ).pack(anchor=tk.CENTER)
@@ -353,10 +353,10 @@ class ReviewAnalyzerApp(ctk.CTk):
         # Изменяем размер окна при переключении режимов
         if is_multi:
             current_width = self.winfo_width()
-            self.geometry(f"{current_width}x650")  # Увеличиваем высоту для режима сравнения
+            self.geometry(f"{current_width}x650")  
         else:
             current_width = self.winfo_width()
-            self.geometry(f"{current_width}x450") # <-- ИЗМЕНЕНО
+            self.geometry(f"{current_width}x450")  
 
     def _setup_result_widgets(self):
         """Создает все виджеты для экрана результатов (для одиночного и сравнения)."""
@@ -393,7 +393,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             border_spacing=8, # Matched comparison style
             state=tk.DISABLED
         )
-        self.result_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10) # Increased padding
+        self.result_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10) 
 
         # --- Контейнер для СРАВНИТЕЛЬНОГО АНАЛИЗА (КОЛОНКИ) --- 
         self.comparison_result_container = ctk.CTkFrame(self.result_frame, fg_color="transparent")
@@ -401,7 +401,7 @@ class ReviewAnalyzerApp(ctk.CTk):
 
         self.comparison_overall_title_label = ctk.CTkLabel(
             self.comparison_result_container, text="", font=self.fonts["result_title"],
-            text_color=TEXT_COLOR, anchor='w', justify="left", wraplength=700 # Начальная длина переноса
+            text_color=TEXT_COLOR, anchor='w', justify="left", wraplength=700 
         )
         # Упаковывается в show_comparison_results
 
@@ -424,7 +424,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.recommendation_textbox = ctk.CTkTextbox(
             self.recommendation_card, font=self.fonts["result_text"], wrap="word",
             fg_color="transparent", text_color=TEXT_COLOR, corner_radius=0,
-            border_width=0, border_spacing=10, state=tk.DISABLED # Убираем height=200
+            border_width=0, border_spacing=10, state=tk.DISABLED 
         )
         # Упаковывается внутри self.recommendation_card
         
@@ -439,7 +439,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         
         ctk.CTkButton(
             history_header_frame, text="← Назад", font=self.fonts["back_button"], 
-            command=self.go_back_to_main_from_history, # Новая команда
+            command=self.go_back_to_main_from_history, 
             width=100, height=32, corner_radius=16, fg_color="#3a3a3c",
             text_color=TEXT_COLOR, hover_color="#4a4a4c"
         ).pack(side=tk.LEFT)
@@ -449,7 +449,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             history_header_frame, text="Очистить всю историю", font=self.fonts["back_button"],
             command=self._clear_history, width=150, height=32, corner_radius=16,
             fg_color="#e74c3c", hover_color="#c0392b", text_color=TEXT_COLOR,
-            text_color_disabled="#D3D3D3"  # Светло-серый для неактивного состояния
+            text_color_disabled="#D3D3D3"  
         )
         self.clear_history_button.pack(side=tk.RIGHT)
 
@@ -468,7 +468,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                                              text="История анализов пока пуста.",
                                              font=self.fonts["text"], 
                                              text_color=SECONDARY_TEXT)
-        # self.no_history_label.pack(pady=20) # Будет упаковано в _populate_history_list
+        # self.no_history_label.pack(pady=20) 
 
     def _clear_history(self):
         """Очищает историю анализов после подтверждения."""
@@ -480,9 +480,9 @@ class ReviewAnalyzerApp(ctk.CTk):
         )
         
         if confirm:
-            self.analysis_history = []  # Очищаем список истории
-            self._save_history_to_file()  # Сохраняем пустой список в файл
-            self._populate_history_list()  # Обновляем отображение списка истории
+            self.analysis_history = []  
+            self._save_history_to_file()  
+            self._populate_history_list()  
 
     # --- Взаимодействие с UI и вспомогательные функции ---
 
@@ -499,7 +499,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                  if not isinstance(widget.master, (ctk.CTkEntry, ctk.CTkTextbox)):
                       if not isinstance(widget.master.master, (ctk.CTkEntry, ctk.CTkTextbox)):
                            self.focus_set()
-             except (AttributeError, tk.TclError): # Обработать случаи, когда родительский виджет не существует или виджет уничтожен
+             except (AttributeError, tk.TclError): 
                  self.focus_set()
 
     def _toggle_fullscreen(self, event=None):
@@ -514,24 +514,23 @@ class ReviewAnalyzerApp(ctk.CTk):
             # но пока оставим так для простоты.
             # self.geometry("900x650" if self.mode_var.get() == "multi" else "900x450")
 
-
     def _update_title_wraplength(self, event=None):
         """Корректирует длину переноса строки метки заголовка результата в зависимости от ширины фрейма."""
         try:
             # Для одиночного результата
             if hasattr(self, 'product_title_label') and self.product_title_label.winfo_ismapped():
-                wraplength_single = self.single_result_container.winfo_width() - 50 # Используем ширину single_result_container
+                wraplength_single = self.single_result_container.winfo_width() - 50 
                 if wraplength_single > 0:
                     self.product_title_label.configure(wraplength=wraplength_single)
             
             # Для сравнительного результата
             if hasattr(self, 'comparison_overall_title_label') and self.comparison_overall_title_label.winfo_ismapped():
-                wraplength_compare = self.comparison_result_container.winfo_width() - 50 # Используем ширину comparison_result_container
+                wraplength_compare = self.comparison_result_container.winfo_width() - 50 
                 if wraplength_compare > 0:
                     self.comparison_overall_title_label.configure(wraplength=wraplength_compare)
 
         except tk.TclError:
-            pass # Виджет может быть уничтожен
+            pass 
 
     def _set_result_text(self, text):
         """Задает текст в результирующем текстовом поле."""
@@ -550,12 +549,12 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.comparison_result_container.pack_forget() 
 
         if self.viewing_from_history:
-            self.viewing_from_history = False # Сбрасываем флаг
-            self.show_history_screen() # Возвращаемся на экран истории
+            self.viewing_from_history = False 
+            self.show_history_screen() 
         else:
-            self.history_frame.pack_forget() # Скрываем историю, если вдруг была активна (маловероятно тут)
+            self.history_frame.pack_forget() 
             self.main_frame.pack(expand=True, fill="both")
-            self.geometry("900x650" if self.mode_var.get() == "multi" else "900x450") # <-- ИЗМЕНЕНО # Восстанавливаем размер как при обычном возврате
+            self.geometry("900x650" if self.mode_var.get() == "multi" else "900x450") 
             self.title(APP_NAME) 
         
     def _show_loading_overlay(self, message):
@@ -563,11 +562,10 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.main_frame.pack_forget()
         self.result_frame.pack_forget()
         self.loading_overlay_label.configure(text=message)
-        if self.loading_progress_bar: # Убедимся, что он уже создан
-            self.loading_progress_bar.set(0) # Сбрасываем прогресс-бар при каждом новом показе
+        if self.loading_progress_bar: 
+            self.loading_progress_bar.set(0) 
         self.loading_overlay_frame.pack(expand=True, fill="both", padx=20, pady=20)
-        self.update_idletasks() # Обновить GUI немедленно
-
+        self.update_idletasks() 
 
     def _hide_loading_overlay(self):
         """Скрывает оверлей загрузки."""
@@ -624,7 +622,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                     return match.group(1)
                 
             # Паттерн для прямых числовых идентификаторов из URL
-            pattern = r"\d{7,15}"  # Ищем 7+ цифр подряд
+            pattern = r"\d{7,15}"  
             match = re.search(pattern, url_or_id)
             if match:
                 return match.group(0)
@@ -653,7 +651,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                 # Анализ одного товара
                 product_id_input = self.url_input.get().strip()
                 if not product_id_input:
-                    self._hide_loading_overlay() # Скрыть загрузку при ошибке запуска процесса
+                    self._hide_loading_overlay() 
                     messagebox.showerror("Ошибка", "Введите ссылку на товар или его артикул.", parent=self)
                     return
                 
@@ -661,7 +659,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                 product_id = self.extract_product_id(product_id_input)
                 
                 # Запускаем процесс анализа
-                self._show_loading_overlay(f"Анализируем: {product_id_input[:30]}...") # Обновляем сообщение при старте
+                self._show_loading_overlay(f"Анализируем: {product_id_input[:30]}...") 
                 process = multiprocessing.Process(
                     target=self.perform_analysis_process,
                     args=(product_id, self.result_queue)
@@ -670,8 +668,8 @@ class ReviewAnalyzerApp(ctk.CTk):
                 process.start()
                 
             else: # Режим "multi" (сравнение)
-                product_ids_inputs = [] # Для хранения сырых введенных строк
-                product_ids_processed = [] # Для хранения обработанных (извлеченных) ID
+                product_ids_inputs = [] 
+                product_ids_processed = [] 
 
                 for entry in self.product_entries:
                     product_input_raw = entry.get().strip()
@@ -680,7 +678,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                         product_ids_processed.append(self.extract_product_id(product_input_raw))
                 
                 if len(product_ids_processed) < 2:
-                    self._hide_loading_overlay() # Сначала скрываем оверлей
+                    self._hide_loading_overlay() 
                     # Теперь восстанавливаем главный экран, чтобы он был фоном для диалога
                     self.main_frame.pack(expand=True, fill="both") 
 
@@ -694,7 +692,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                             icon=messagebox.QUESTION,
                             parent=self
                         )
-                        if user_choice: # Пользователь выбрал "Да"
+                        if user_choice: 
                             self.mode_var.set("single")
                             self.url_input.delete(0, tk.END)
                             self.url_input.insert(0, id_to_analyze_single)
@@ -708,7 +706,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                             process.start()
                             self.after(100, lambda: self.check_analysis_results())
                             return 
-                        else: # Пользователь выбрал "Нет"
+                        else: 
                             # main_frame уже восстановлен, просто выходим
                             return
                     else: # Меньше одного товара (0 валидных вводов)
@@ -728,7 +726,7 @@ class ReviewAnalyzerApp(ctk.CTk):
 
                 process = multiprocessing.Process(
                     target=self.perform_multiple_analysis_process,
-                    args=(product_ids_processed, self.result_queue) # Передаем обработанные ID
+                    args=(product_ids_processed, self.result_queue) 
                 )
                 process.daemon = True
                 process.start()
@@ -737,7 +735,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             self.after(100, lambda: self.check_analysis_results())
             
         except Exception as e:
-            self._hide_loading_overlay() # Скрыть загрузку при ошибке запуска процесса
+            self._hide_loading_overlay() 
             detailed_error = traceback.format_exc()
             print(f"Ошибка запуска процесса анализа: {e}\n{detailed_error}")
             messagebox.showerror("Ошибка", f"Не удалось запустить процесс анализа:\n{e}")
@@ -752,17 +750,17 @@ class ReviewAnalyzerApp(ctk.CTk):
             product_name = wb_review.product_name or f"Товар {product_id}"
             # Отправить обновление *перед* потенциально долгим парсингом
             result_queue.put(("status_update", (0.1, f"Получаем данные для товара {product_id}...")))
-            reviews = wb_review.parse(only_this_variation=True) # Предполагая, что это желаемое поведение
+            reviews = wb_review.parse(only_this_variation=True) 
             return {
                 "product_id": product_id,
                 "product_name": product_name,
-                "reviews": reviews or [], # Убедиться, что это список
+                "reviews": reviews or [], 
                 "review_count": len(reviews) if reviews else 0
             }
         except Exception as e:
             error_msg = f"Ошибка при получении данных для товара {product_id}: {e}"
             result_queue.put(("error", error_msg))
-            return None # Указать на неудачу для этого товара
+            return None 
 
     @staticmethod
     def _get_single_analysis(product_data, result_queue):
@@ -795,7 +793,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             return analysis
         except Exception as e:
             error_msg = f"Ошибка ИИ-анализа для {product_name} ({product_id}): {e}"
-            result_queue.put(("error_partial", error_msg)) # Не фатальная ошибка
+            result_queue.put(("error_partial", error_msg)) 
             return f"Не удалось выполнить анализ для товара '{product_name}': Ошибка ({type(e).__name__})."
 
     @staticmethod
@@ -806,7 +804,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         if num_products < 2: return ""
 
         product_info_for_prompt = []
-        for data in individual_analyses_data.values(): # individual_analyses_data это individual_analyses_map
+        for data in individual_analyses_data.values(): 
             # Убираем явное упоминание количества отзывов из этой части промпта,
             # но ИИ все еще будет знать о нем из individual_analyses_data, если это передается в другом месте.
             # Модель должна сама решить, насколько это важно, на основе общего анализа.
@@ -853,7 +851,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             # 1. Получение данных
             result_queue.put(("status_update", (0.2, f"Получаем данные для товара {product_id}...")))
             product_data = ReviewAnalyzerApp._fetch_product_data(product_id, result_queue)
-            if not product_data: return # Ошибка уже отправлена получателем данных
+            if not product_data: return 
 
             # 2. Выполнение анализа
             result_queue.put(("status_update", (0.7, f"Анализируем отзывы для '{product_data['product_name']}'...")))
@@ -878,7 +876,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             for pid in product_ids:
                  result_queue.put(("status_update", (0.1, f"Обработка товара {pid}...")))
                  data = ReviewAnalyzerApp._fetch_product_data(pid, result_queue)
-                 if data: # Добавлять, только если получение данных прошло успешно
+                 if data: 
                      products_data[pid] = data
                  # Если получение данных не удалось, ошибка уже отправлена через очередь
 
@@ -892,18 +890,18 @@ class ReviewAnalyzerApp(ctk.CTk):
                  return
 
             # 2. Выполнение индивидуальных анализов
-            individual_analyses_map = {} # Используем map для сохранения порядка и доступа по ID, если нужно
+            individual_analyses_map = {} 
             for pid, p_data in products_data.items():
                 # Не отправляем update_loading_analyze из _get_single_analysis в UI,
                 # так как это будет выглядеть как много быстрых обновлений.
                 # Вместо этого, перед циклом можно отправить одно "Анализируем товары..."
                 # или после каждого анализа обновлять "Проанализировано X из Y..."
                 result_queue.put(("status_update", (0.7, f"Анализируем отзывы для '{p_data['product_name']}'...")))
-                analysis_text = ReviewAnalyzerApp._get_single_analysis(p_data, result_queue) # result_queue передается для error_partial
+                analysis_text = ReviewAnalyzerApp._get_single_analysis(p_data, result_queue) 
                 individual_analyses_map[pid] = {
-                    "product_id": pid, # Добавим ID для возможного использования
+                    "product_id": pid, 
                     "product_name": p_data["product_name"],
-                    "analysis": analysis_text, # Содержит сообщение об ошибке, если анализ не удался
+                    "analysis": analysis_text, 
                     "review_count": p_data["review_count"]
                 }
             
@@ -944,7 +942,7 @@ class ReviewAnalyzerApp(ctk.CTk):
 
             overall_recommendation_analysis = ReviewAnalyzerApp._get_ai_response(comparison_prompt)
             
-            product_names_for_title = [d["product_name"] for d in individual_analyses_map.values()] # Используем все, даже если анализ неудачный для заголовка
+            product_names_for_title = [d["product_name"] for d in individual_analyses_map.values()] 
             comparison_title = f"Сравнение: {', '.join(product_names_for_title)}"
 
             result_queue.put(("status_update", (1.0, "Завершение сравнения...")))
@@ -966,7 +964,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                     progress_value, status_text = data
                     self.loading_overlay_label.configure(text=status_text)
                     if self.loading_progress_bar:
-                        self.loading_progress_bar.set(float(progress_value)) # Устанавливаем прогресс
+                        self.loading_progress_bar.set(float(progress_value)) 
                 elif message_type == "result":
                     self._hide_loading_overlay()
                     product_name, analysis = data
@@ -983,9 +981,9 @@ class ReviewAnalyzerApp(ctk.CTk):
                     self._hide_loading_overlay()
                     error_message = data
                     self.show_error_on_main_screen(error_message)
-                self.update_idletasks() # Обновляем GUI после каждого сообщения
+                self.update_idletasks() 
         except queue.Empty:
-            pass # Очередь пуста, ничего не делаем
+            pass 
         except Exception as e:
             print(f"Ошибка в check_analysis_results: {e}")
             self._hide_loading_overlay()
@@ -997,7 +995,7 @@ class ReviewAnalyzerApp(ctk.CTk):
 
     # --- Отображение финальных результатов/ошибок ---
 
-    def show_results(self, product_name, analysis, from_history=False): # <-- ДОБАВЛЕН from_history
+    def show_results(self, product_name, analysis, from_history=False): 
         """Отображает экран с результатами анализа для ОДНОГО товара."""
         if not from_history:
             # Сохраняем в историю только если это новый анализ
@@ -1009,17 +1007,14 @@ class ReviewAnalyzerApp(ctk.CTk):
             })
             # Ограничение на размер истории (например, последние 20 записей)
             if len(self.analysis_history) > 20:
-                self.analysis_history.pop(0) # Удаляем самый старый элемент
-            self._save_history_to_file() # <-- СОХРАНЯЕМ ИСТОРИЮ
+                self.analysis_history.pop(0) 
+            self._save_history_to_file() 
 
-        if self.state() == 'zoomed': # Если было максимизировано
+        if self.state() == 'zoomed': 
             self.state('normal')
-        # self.attributes('-fullscreen', False) # Больше не используем
-        if self.main_frame.winfo_ismapped(): self.main_frame.pack_forget()
-        if self.comparison_result_container.winfo_ismapped(): self.comparison_result_container.pack_forget()
         
         self.result_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
-        self.single_result_container.pack(fill=tk.BOTH, expand=True) # Показываем контейнер для одиночного
+        self.single_result_container.pack(fill=tk.BOTH, expand=True) 
 
         self.title(f"Анализ: {product_name[:50]}{'...' if len(product_name)>50 else ''}")
 
@@ -1037,14 +1032,11 @@ class ReviewAnalyzerApp(ctk.CTk):
     def show_no_reviews(self, product_name):
         """Отображает сообщение о том, что отзывы не найдены (для одиночного товара)."""
         # Анализы без отзывов не сохраняем в историю
-        if self.state() == 'zoomed': # Если было максимизировано
+        if self.state() == 'zoomed': 
             self.state('normal')
-        # self.attributes('-fullscreen', False) # Больше не используем
-        if self.main_frame.winfo_ismapped(): self.main_frame.pack_forget()
-        if self.comparison_result_container.winfo_ismapped(): self.comparison_result_container.pack_forget()
-
+        
         self.result_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
-        self.single_result_container.pack(fill=tk.BOTH, expand=True) # Показываем контейнер для одиночного
+        self.single_result_container.pack(fill=tk.BOTH, expand=True) 
 
         self.title(f"Нет отзывов: {product_name[:50]}{'...' if len(product_name)>50 else ''}")
 
@@ -1059,7 +1051,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.update_idletasks()
         self._update_title_wraplength()
 
-    def show_comparison_results(self, overall_title, individual_analyses, overall_recommendation, from_history=False): # <-- ДОБАВЛЕН from_history
+    def show_comparison_results(self, overall_title, individual_analyses, overall_recommendation, from_history=False): 
         """Отображает экран с результатами сравнения в КОЛОНКАХ."""
         if not from_history:
             # Сохраняем в историю только если это новый анализ
@@ -1067,13 +1059,13 @@ class ReviewAnalyzerApp(ctk.CTk):
                 'type': 'multi',
                 'timestamp': datetime.datetime.now(),
                 'comparison_title': overall_title,
-                'individual_product_analyses': individual_analyses, # Сохраняем полный набор данных
+                'individual_product_analyses': individual_analyses, 
                 'overall_recommendation': overall_recommendation
             })
             # Ограничение на размер истории
             if len(self.analysis_history) > 20:
                 self.analysis_history.pop(0)
-            self._save_history_to_file() # <-- СОХРАНЯЕМ ИСТОРИЮ
+            self._save_history_to_file() 
 
         if self.main_frame.winfo_ismapped(): self.main_frame.pack_forget()
         if self.single_result_container.winfo_ismapped(): self.single_result_container.pack_forget()
@@ -1081,7 +1073,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.result_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
         self.comparison_result_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        if self.state() != 'zoomed': # Максимизировать, если еще не максимизировано
+        if self.state() != 'zoomed': 
             self.state('zoomed') 
 
         self.title(f"{overall_title[:60]}{'...' if len(overall_title)>60 else ''}")
@@ -1102,7 +1094,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             self.columns_container_frame.grid_columnconfigure(i, weight=0)
 
         for i in range(num_columns):
-            self.columns_container_frame.grid_columnconfigure(i, weight=1, uniform="comp_cols") # <-- ДОБАВЛЕНО uniform
+            self.columns_container_frame.grid_columnconfigure(i, weight=1, uniform="comp_cols") 
         
         self.columns_container_frame.grid_rowconfigure(0, weight=1)
         
@@ -1145,9 +1137,9 @@ class ReviewAnalyzerApp(ctk.CTk):
     def show_error_on_main_screen(self, message):
         """Отображает окно с сообщением об ошибке, убедившись, что главный экран виден."""
         if not self.main_frame.winfo_ismapped():
-            self.go_back() # Сначала переключиться обратно на главный экран
+            self.go_back() 
         # Использовать self.after, чтобы убедиться, что go_back() завершил рендеринг перед показом всплывающего окна
-        self.after(50, lambda: messagebox.showerror("Ошибка анализа", message, parent=self)) # Установить родительский элемент
+        self.after(50, lambda: messagebox.showerror("Ошибка анализа", message, parent=self)) 
 
     def _resize_window_based_on_content(self):
         """Пытается изменить размер окна на основе высоты текста результата."""
@@ -1161,7 +1153,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             # CTkTextbox не имеет прямого подсчета строк, использовать index('end-1c')
             num_lines = int(self.result_text.index('end-1c').split('.')[0])
             # Оценить высоту строки на основе шрифта - это приблизительно!
-            line_height_estimate = self.fonts["result_text"].cget("size") + 6 # Добавить немного отступа
+            line_height_estimate = self.fonts["result_text"].cget("size") + 6 
             text_height = num_lines * line_height_estimate
 
             # Добавить высоту для заголовка, кнопки, отступов и т.д.
@@ -1171,8 +1163,8 @@ class ReviewAnalyzerApp(ctk.CTk):
             # Ограничить высоту между minsize и 85% высоты экрана
             screen_height = self.winfo_screenheight()
             max_height = int(screen_height * 0.85)
-            min_height = self.winfo_reqheight() # Использовать запрошенный минимум или текущую геометрию
-            min_h = max(min_height, 400) # Гарантировать минимум 400px
+            min_height = self.winfo_reqheight() 
+            min_h = max(min_height, 400) 
 
             new_height = max(min_h, min(total_content_height, max_height))
 
@@ -1182,7 +1174,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             min_w = 900 if "Сравнение" in self.product_title_label.cget("text") else 700
             new_width = max(current_width, min_w)
 
-            self.geometry(f"{new_width}x{int(new_height)}") # Использовать int для геометрии
+            self.geometry(f"{new_width}x{int(new_height)}") 
 
         except (tk.TclError, AttributeError, ValueError) as e:
             print(f"Предупреждение: Не удалось автоматически изменить размер окна: {e}")
@@ -1192,7 +1184,7 @@ class ReviewAnalyzerApp(ctk.CTk):
         if self.state() == 'zoomed': self.state('normal')
         self.history_frame.pack_forget()
         self.main_frame.pack(expand=True, fill="both")
-        self.geometry("900x650" if self.mode_var.get() == "multi" else "900x450") # <-- ИЗМЕНЕНО # Восстанавливаем размер как при обычном возврате
+        self.geometry("900x650" if self.mode_var.get() == "multi" else "900x450") 
         self.title(APP_NAME)
         
     def _show_loading_overlay(self, message):
@@ -1200,10 +1192,10 @@ class ReviewAnalyzerApp(ctk.CTk):
         self.main_frame.pack_forget()
         self.result_frame.pack_forget()
         self.loading_overlay_label.configure(text=message)
-        if self.loading_progress_bar: # Убедимся, что он уже создан
-            self.loading_progress_bar.set(0) # Сбрасываем прогресс-бар при каждом новом показе
+        if self.loading_progress_bar: 
+            self.loading_progress_bar.set(0) 
         self.loading_overlay_frame.pack(expand=True, fill="both", padx=20, pady=20)
-        self.update_idletasks() # Обновить GUI немедленно
+        self.update_idletasks() 
 
     def _hide_loading_overlay(self):
         """Скрывает оверлей загрузки."""
@@ -1214,10 +1206,10 @@ class ReviewAnalyzerApp(ctk.CTk):
         """Отображает экран истории анализов."""
         if self.state() == 'zoomed': self.state('normal')
         self.main_frame.pack_forget()
-        self.result_frame.pack_forget() # Также скрываем экран результатов, если он был открыт
+        self.result_frame.pack_forget() 
         self.history_frame.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
         self.title(f"{APP_NAME} - История анализов")
-        self._populate_history_list() # Заполняем список при показе
+        self._populate_history_list() 
 
     def _populate_history_list(self):
         """Заполняет/обновляет список элементов в scrollable frame истории."""
@@ -1231,15 +1223,15 @@ class ReviewAnalyzerApp(ctk.CTk):
                                                  font=self.fonts["text"], 
                                                  text_color=SECONDARY_TEXT)
             self.no_history_label.pack(pady=20, padx=10, anchor="center")
-            if hasattr(self, 'clear_history_button'): # Проверка на случай раннего вызова
-                self.clear_history_button.configure(state=tk.DISABLED, fg_color="#808080") # Серый фон для неактивного состояния
+            if hasattr(self, 'clear_history_button'): 
+                self.clear_history_button.configure(state=tk.DISABLED, fg_color="#808080") 
             return
-        elif hasattr(self, 'clear_history_button'): # Если история не пуста, кнопка активна
-             self.clear_history_button.configure(state=tk.NORMAL, fg_color="#e74c3c") # Возвращаем красный фон
+        elif hasattr(self, 'clear_history_button'): 
+             self.clear_history_button.configure(state=tk.NORMAL, fg_color="#e74c3c") 
 
         # Показываем элементы в обратном порядке (новые сверху)
         for i, entry in enumerate(reversed(self.analysis_history)):
-            item_frame = ctk.CTkFrame(self.history_scroll_frame, fg_color="#39393d", corner_radius=8) # Цвет чуть светлее карточки
+            item_frame = ctk.CTkFrame(self.history_scroll_frame, fg_color="#39393d", corner_radius=8) 
             item_frame.pack(fill=tk.X, pady=(5, 0) if i > 0 else (0,0), padx=5)
 
             left_info_frame = ctk.CTkFrame(item_frame, fg_color="transparent")
@@ -1252,37 +1244,37 @@ class ReviewAnalyzerApp(ctk.CTk):
             type_label.pack(fill=tk.X)
 
             title_label_text = f"{title_text[:60]}{'...' if len(title_text)>60 else ''}"
-            title_label = ctk.CTkLabel(left_info_frame, text=title_label_text, font=self.fonts["text"], anchor="w", wraplength=450) # Ограничиваем длину
+            title_label = ctk.CTkLabel(left_info_frame, text=title_label_text, font=self.fonts["text"], anchor="w", wraplength=450) 
             title_label.pack(fill=tk.X)
             
             timestamp_text = entry['timestamp'].strftime('%d.%m.%Y %H:%M:%S')
             timestamp_label = ctk.CTkLabel(left_info_frame, text=timestamp_text, font=self.fonts["footer"], anchor="w", text_color=SECONDARY_TEXT)
             timestamp_label.pack(fill=tk.X)
 
-            buttons_frame = ctk.CTkFrame(item_frame, fg_color="transparent") # Фрейм для кнопок
+            buttons_frame = ctk.CTkFrame(item_frame, fg_color="transparent") 
             buttons_frame.pack(side=tk.RIGHT, padx=10, pady=10)
 
             view_button = ctk.CTkButton(
-                buttons_frame, text="Посмотреть", font=self.fonts["back_button"], # Используем шрифт поменьше
-                width=100, height=30, corner_radius=6, # Ширина чуть меньше
+                buttons_frame, text="Посмотреть", font=self.fonts["back_button"], 
+                width=100, height=30, corner_radius=6, 
                 fg_color=ACCENT_COLOR, hover_color="#0069d9",
                 # Используем лямбду для передачи конкретного элемента истории
                 command=lambda e=entry: self._restore_analysis_from_history(e) 
             )
-            view_button.pack(side=tk.LEFT, padx=(0, 5)) # Кнопка просмотра слева
+            view_button.pack(side=tk.LEFT, padx=(0, 5)) 
 
             delete_button = ctk.CTkButton(
                 buttons_frame, text="Удалить", font=self.fonts["back_button"],
-                width=80, height=30, corner_radius=6, # Ширина поменьше
-                fg_color="#e74c3c", hover_color="#c0392b", # Красный цвет для удаления
+                width=80, height=30, corner_radius=6, 
+                fg_color="#e74c3c", hover_color="#c0392b", 
                 command=lambda e=entry: self._delete_history_entry(e)
             )
-            delete_button.pack(side=tk.LEFT) # Кнопка удаления справа от просмотра
+            delete_button.pack(side=tk.LEFT) 
             
     def _restore_analysis_from_history(self, history_entry):
         """Восстанавливает и отображает анализ из истории."""
-        self.history_frame.pack_forget() # Скрываем экран истории
-        self.viewing_from_history = True # Устанавливаем флаг перед показом результатов из истории
+        self.history_frame.pack_forget() 
+        self.viewing_from_history = True 
 
         if history_entry['type'] == 'single':
             self.show_results(
@@ -1307,7 +1299,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             title="Подтверждение удаления",
             message=confirm_message,
             icon=messagebox.WARNING,
-            parent=self # Убедимся, что диалог поверх основного окна
+            parent=self 
         )
         
         if confirm:
@@ -1320,15 +1312,15 @@ class ReviewAnalyzerApp(ctk.CTk):
                 # В данном случае entry_to_delete - это ссылка на элемент списка.
                 self.analysis_history.remove(entry_to_delete)
                 self._save_history_to_file()
-                self._populate_history_list() # Обновить отображение
+                self._populate_history_list() 
             except ValueError:
                 # Это может произойти, если элемент по какой-то причине уже удален или не найден
                 messagebox.showerror("Ошибка", "Не удалось найти элемент для удаления в истории.", parent=self)
-                self._populate_history_list() # Все равно обновить, на всякий случай
+                self._populate_history_list() 
 
     def _get_history_file_path(self) -> str:
         """Возвращает полный путь к файлу истории."""
-        home_path = os.path.expanduser("~") # Корректный способ получить домашнюю директорию
+        home_path = os.path.expanduser("~") 
         
         # Стандартный путь к папке "Документы" на Windows
         documents_folder_name = "Documents"
@@ -1375,7 +1367,7 @@ class ReviewAnalyzerApp(ctk.CTk):
                         print(f"Ошибка разбора элемента истории (время): {e_item} - {item}")
         except (json.JSONDecodeError, IOError, TypeError) as e:
             print(f"Ошибка загрузки файла истории: {e}. Начинаем с пустой истории.")
-            self.analysis_history = [] # Начинаем с пустой истории в случае ошибки
+            self.analysis_history = [] 
 
     def _save_history_to_file(self):
         """Сохраняет текущую историю анализов в файл."""
@@ -1425,7 +1417,7 @@ if __name__ == "__main__":
     # Требуется для упаковки с multiprocessing (например, PyInstaller)
     multiprocessing.freeze_support()
 
-    app = None # Инициализировать app значением None
+    app = None 
     try:
         # Проверка зависимостей теперь происходит при импорте
         app = ReviewAnalyzerApp()
@@ -1446,5 +1438,5 @@ if __name__ == "__main__":
              root.withdraw()
              messagebox.showerror("Критическая ошибка", f"Произошла непредвиденная ошибка при запуске приложения:\n{e}")
              root.destroy()
-        except Exception: # Если даже показ ошибки не удался
-             pass # Просто вывести в консоль (уже сделано)
+        except Exception: 
+             pass 
