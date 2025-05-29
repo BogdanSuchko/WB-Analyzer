@@ -10,6 +10,7 @@ import traceback
 import datetime 
 import json
 import queue
+import asyncio # ДОБАВЛЕНО для запуска async функций из wb.py
 
 # --- Проверка зависимостей ---
 try:
@@ -747,22 +748,76 @@ class ReviewAnalyzerApp(ctk.CTk):
     @staticmethod
     def _fetch_product_data(product_id, result_queue):
         """Получает название и отзывы для одного товара. Выполняется в рабочем процессе."""
+        
+        async def async_fetch_data(): # Оборачиваем в async функцию
+            wb_review = None # Инициализируем wb_review здесь
+            try:
+                # result_queue.put(("status_update", (0.1, f"Создание экземпляра WbReview для {product_id}...")))
+                wb_review = WbReview(product_id)
+                
+                # Обновление статуса перед долгим парсингом/инициализацией
+                # _init_product_info теперь вызывается лениво внутри parse или при прямом доступе
+                # result_queue.put(("status_update", (0.15, f"Инициализация данных для {product_id}...")))
+                # await wb_review._init_product_info() # Явная инициализация для получения product_name
+
+                # product_name теперь получается после _init_product_info, которое может быть вызвано в parse
+                # Для UI лучше получить имя заранее, если возможно, или использовать ID
+                # Попробуем инициализировать, чтобы получить имя для UI пораньше
+                await wb_review._init_product_info()
+                product_name_for_ui = wb_review.product_name if wb_review.product_name else f"Товар {product_id}"
+
+                result_queue.put(("status_update", (0.1, f"Получаем отзывы для {product_name_for_ui}...")))
+                
+                reviews = await wb_review.parse(only_this_variation=True) 
+                
+                # После parse product_name должен быть точно установлен
+                product_name_final = wb_review.product_name if wb_review.product_name else f"Товар {product_id}"
+
+                return {
+                    "product_id": product_id, # Исходный ID, как был введен/извлечен
+                    "product_name": product_name_final, # Имя после всех попыток получения
+                    "reviews": reviews or [], 
+                    "review_count": len(reviews) if reviews else 0,
+                    "wb_review_instance": wb_review # Передаем инстанс для дальнейшего закрытия сессии
+                }
+            except ValueError as ve: # Ошибка при создании WbReview (неверный SKU)
+                error_msg = f"Ошибка входных данных для товара (возможно, неверный артикул '{product_id}'): {ve}"
+                print(f"MAIN.PY: _fetch_product_data ValueError: {error_msg}")
+                result_queue.put(("error_critical_fetch", error_msg)) # Используем новый тип ошибки
+                # Если wb_review был создан до ошибки, пытаемся закрыть сессию
+                if wb_review:
+                    await wb_review.close_session()
+                return None
+            except Exception as e:
+                error_msg = f"Ошибка при получении данных для товара {product_id}: {type(e).__name__} - {e}"
+                print(f"MAIN.PY: _fetch_product_data Exception: {error_msg}")
+                detailed_error = traceback.format_exc()
+                print(detailed_error)
+                result_queue.put(("error_critical_fetch", error_msg)) # Используем новый тип ошибки
+                if wb_review: # Если инстанс был создан до ошибки
+                    await wb_review.close_session()
+                return None
+            # finally: # close_session должен вызываться только если он был создан
+            #     if wb_review: # wb_review может быть не определен, если WbReview(product_id) упал
+            #        await wb_review.close_session() # Закрываем сессию после использования
+
+        # Запускаем async функцию в текущем процессе (который сам по себе Process)
+        # Loop можно создавать один раз на процесс, если бы было много вызовов,
+        # но для одного вызова asyncio.run() достаточно и он управляет своим циклом.
         try:
-            wb_review = WbReview(product_id)
-            product_name = wb_review.product_name or f"Товар {product_id}"
-            # Отправить обновление *перед* потенциально долгим парсингом
-            result_queue.put(("status_update", (0.1, f"Получаем данные для товара {product_id}...")))
-            reviews = wb_review.parse(only_this_variation=True) 
-            return {
-                "product_id": product_id,
-                "product_name": product_name,
-                "reviews": reviews or [], 
-                "review_count": len(reviews) if reviews else 0
-            }
-        except Exception as e:
-            error_msg = f"Ошибка при получении данных для товара {product_id}: {e}"
-            result_queue.put(("error", error_msg))
-            return None 
+            # return asyncio.run(async_fetch_data()) # Python 3.7+
+            # Для совместимости, если где-то будет старый Python (хотя uv ставит свежие)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(async_fetch_data())
+            loop.close()
+            return result
+        except Exception as e_run:
+            # Эта ошибка будет очень общей, если что-то не так с запуском asyncio
+            error_msg = f"Критическая ошибка запуска async обработки для {product_id}: {e_run}"
+            print(f"MAIN.PY: _fetch_product_data asyncio.run Exception: {error_msg}")
+            result_queue.put(("error_critical_fetch", error_msg))
+            return None
 
     @staticmethod
     def _get_single_analysis(product_data, result_queue):
@@ -778,7 +833,7 @@ class ReviewAnalyzerApp(ctk.CTk):
             if not hasattr(ReviewAnalyzer, 'analyze_reviews'):
                  raise AttributeError("Метод 'analyze_reviews' не найден в ReviewAnalyzer.")
             # Сообщить UI, что начинается анализ для этого товара
-            result_queue.put(("status_update", (0.8, f"Анализируем отзывы для '{product_name}'...")))
+            result_queue.put(("status_update", (0.8, f"Анализируем отзывы для '{product_name}' ({len(reviews)} шт.)...")))
             analysis = ReviewAnalyzer.analyze_reviews(reviews, product_name)
             
             # Проверка на наличие ошибки в тексте анализа
@@ -801,109 +856,206 @@ class ReviewAnalyzerApp(ctk.CTk):
     @staticmethod
     def perform_analysis_process(product_id, result_queue):
         """Функция рабочего процесса для анализа ОДНОГО товара."""
+        wb_instance_to_close = None
         try:
             # 1. Получение данных
-            result_queue.put(("status_update", (0.2, f"Получаем данные для товара {product_id}...")))
+            result_queue.put(("status_update", (0.05, f"Запрос данных для товара {product_id}...")))
             product_data = ReviewAnalyzerApp._fetch_product_data(product_id, result_queue)
-            if not product_data: return 
+            
+            if not product_data: # Ошибка уже должна была быть отправлена из _fetch_product_data
+                # result_queue.put(("error", f"Не удалось получить данные для товара {product_id}.")) # Это лишнее
+                return 
+
+            wb_instance_to_close = product_data.get("wb_review_instance")
 
             # 2. Выполнение анализа
+            # product_data["reviews"] уже содержит отзывы
             result_queue.put(("status_update", (0.7, f"Анализируем отзывы для '{product_data['product_name']}'...")))
             analysis_result = ReviewAnalyzerApp._get_single_analysis(product_data, result_queue)
 
             # 3. Отправка финального результата
-            result_type = "result" if product_data["reviews"] else "no_reviews"
+            # result_type = "result" if product_data["reviews"] else "no_reviews" # no_reviews обрабатывается в _get_single_analysis
             result_queue.put(("status_update", (1.0, "Завершение анализа...")))
-            result_queue.put(("result", (product_data["product_name"], analysis_result if result_type == "result" else f"У товара '{product_data['product_name']}' ({product_id}) нет отзывов.")))
+            # product_data['product_name'] может быть пустым, если _init_product_info не отработал
+            display_product_name = product_data.get('product_name', f"Товар {product_id}")
+            result_queue.put(("result", (display_product_name, analysis_result))) # анализ уже содержит "нет отзывов" если надо
 
         except Exception as e:
             # Перехват всех неожиданных ошибок в одиночном процессе
             error_details = traceback.format_exc()
-            result_queue.put(("error", f"Критическая ошибка при анализе товара {product_id}:\n{e}\n\nTraceback:\n{error_details}"))
+            error_msg = f"Критическая ошибка в perform_analysis_process для {product_id}:\n{type(e).__name__}: {e}"
+            print(f"MAIN.PY: {error_msg}\nTraceback:\n{error_details}")
+            result_queue.put(("error", error_msg)) # Общая ошибка процесса
+        finally:
+            if wb_instance_to_close:
+                # print(f"MAIN.PY: Закрытие сессии для {product_id} в perform_analysis_process")
+                # asyncio.run(wb_instance_to_close.close_session())
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(wb_instance_to_close.close_session())
+                loop.close()
 
     @staticmethod
     def perform_multiple_analysis_process(product_ids, result_queue):
         """Функция рабочего процесса для анализа и СРАВНЕНИЯ нескольких товаров."""
+        # Список для хранения экземпляров WbReview, чтобы закрыть их сессии в конце
+        wb_instances_to_close = []
         try:
             # 1. Получение данных для всех товаров
-            products_data = {}
-            for pid in product_ids:
-                 result_queue.put(("status_update", (0.1, f"Обработка товара {pid}...")))
+            products_data_map = {} # Используем map для сохранения исходных product_id
+            processed_ok_count = 0
+
+            for i, pid in enumerate(product_ids):
+                 # Обновляем прогресс-бар для каждого товара перед его обработкой
+                 # Например, 0.05 для первого, 0.1 для второго и т.д. до 0.5 (если 10 товаров)
+                 # Это очень грубая оценка, т.к. каждый товар может занять разное время.
+                 # Лучше обновлять внутри _fetch_product_data, но это усложнит логику прогресса.
+                 # Пока оставим просто общий статус.
+                 current_progress_estimate = (i + 1) / (len(product_ids) * 2) # *2 т.к. еще анализ
+                 result_queue.put(("status_update", (current_progress_estimate * 0.6, f"Обработка товара {pid} ({i+1}/{len(product_ids)})..."))) # 0.6 - доля сбора данных
+                 
                  data = ReviewAnalyzerApp._fetch_product_data(pid, result_queue)
                  if data: 
-                     products_data[pid] = data
+                     products_data_map[pid] = data
+                     if data.get("wb_review_instance"):
+                        wb_instances_to_close.append(data["wb_review_instance"])
+                     processed_ok_count +=1
                  # Если получение данных не удалось, ошибка уже отправлена через очередь
+                 # и product_data будет None, он не попадет в карту.
 
-            if not products_data:
-                 result_queue.put(("status_update", (0.9, "Недостаточно данных для сравнения.")))
-                 result_queue.put(("error", "Не удалось получить данные ни для одного из указанных товаров."))
+            if not products_data_map: # Если ни один товар не удалось обработать
+                 # Ошибка уже должна была быть отправлена для каждого из _fetch_product_data
+                 # result_queue.put(("error", "Не удалось получить данные ни для одного из указанных товаров."))
                  return
-            if len(products_data) < 2 and len(product_ids) >= 2:
-                 result_queue.put(("status_update", (0.9, "Недостаточно данных для сравнения.")))
-                 result_queue.put(("error", f"Удалось получить данные только для {len(products_data)} из {len(product_ids)} товаров. Сравнение невозможно."))
+            
+            # Фильтруем только успешно полученные данные для дальнейшего анализа
+            valid_products_for_analysis = [p_data for p_data in products_data_map.values() if p_data]
+
+
+            if len(valid_products_for_analysis) < 2 and len(product_ids) >=2 : # Если изначально было >=2, а осталось <2
+                 # result_queue.put(("status_update", (0.9, "Недостаточно данных для сравнения."))) # Это будет показано если нет ошибки
+                 # Формируем сообщение об ошибке на основе того, что произошло
+                 error_message_comparison = f"Удалось получить данные только для {len(valid_products_for_analysis)} из {len(product_ids)} товаров. "
+                 if len(valid_products_for_analysis) == 1:
+                     error_message_comparison += f"Товар: '{valid_products_for_analysis[0]['product_name']}'. Сравнение невозможно."
+                 else: # 0 товаров
+                     error_message_comparison += "Сравнение невозможно."
+
+                 # Вместо общей ошибки, передаем частичные результаты, если они есть, и сообщение о невозможности сравнения
+                 # Однако, UI сейчас не готов показывать "частичное сравнение".
+                 # Пока просто выдадим ошибку, если не набралось хотя бы 2 товара.
+                 result_queue.put(("error", error_message_comparison))
                  return
 
             # 2. Выполнение индивидуальных анализов
-            individual_analyses_map = {} 
-            for pid, p_data in products_data.items():
-                # Не отправляем update_loading_analyze из _get_single_analysis в UI,
-                # так как это будет выглядеть как много быстрых обновлений.
-                # Вместо этого, перед циклом можно отправить одно "Анализируем товары..."
-                # или после каждого анализа обновлять "Проанализировано X из Y..."
-                result_queue.put(("status_update", (0.7, f"Анализируем отзывы для '{p_data['product_name']}'...")))
+            individual_analyses_list = [] # Теперь это будет список словарей для _generate_comparison_prompt
+            
+            # Общий прогресс после сбора данных, перед анализами
+            base_progress_for_analysis = 0.6 
+            num_valid_products = len(valid_products_for_analysis)
+
+            for idx, p_data in enumerate(valid_products_for_analysis):
+                # Обновляем прогресс для каждого анализа
+                analysis_progress = base_progress_for_analysis + ((idx + 1) / num_valid_products) * 0.3 # 0.3 - доля всех анализов
+                result_queue.put(("status_update", (analysis_progress, f"Анализ для '{p_data['product_name']}' ({idx+1}/{num_valid_products})...")))
+                
                 analysis_text = ReviewAnalyzerApp._get_single_analysis(p_data, result_queue) 
-                individual_analyses_map[pid] = {
-                    "product_id": pid, 
+                
+                # product_name уже должен быть корректным из _fetch_product_data
+                individual_analyses_list.append({
+                    "product_id": p_data["product_id"], 
                     "product_name": p_data["product_name"],
                     "analysis": analysis_text, 
                     "review_count": p_data["review_count"]
-                }
+                })
             
             # Проверим, сколько анализов реально удалось получить (не содержат явных ошибок)
             successful_analyses_list = [
-                data for data in individual_analyses_map.values()
-                if "Не удалось выполнить анализ" not in data["analysis"] and "не найдено отзывов" not in data["analysis"]
+                data for data in individual_analyses_list # Используем уже сформированный список
+                if "Не удалось выполнить анализ" not in data["analysis"] and 
+                   "не найдено отзывов" not in data["analysis"] and
+                   not data["analysis"].startswith("Ошибка GitHub Models API:") and # Доп. проверка
+                   not data["analysis"].startswith("Ошибка анализа отзывов") # Общая ошибка из ReviewAnalyzer
             ]
 
-            if len(successful_analyses_list) < 2:
-                # Если после индивидуальных анализов осталось меньше двух успешных, сравнение не имеет смысла.
-                # Отправим результаты индивидуальных анализов (даже если они с ошибками)
-                # и сообщение, что сравнение невозможно.
-                # Это более сложный сценарий для UI, пока просто выдадим ошибку сравнения.
-                # TODO: Позже можно улучшить UI для показа частичных результатов.
-                result_queue.put(("status_update", (0.9, "Недостаточно данных для сравнения.")))
-                result_queue.put(("error", f"Не удалось получить достаточно успешных индивидуальных анализов для {len(product_ids)} товаров. Сравнение невозможно."))
-                # Возможно, стоит передать individual_analyses_map, чтобы показать, что есть
-                # result_queue.put({
-                # "type": "multi_result_partial_failure",
-                # "comparison_title": f"Анализ товаров (сравнение не удалось)",
-                # "individual_product_analyses": list(individual_analyses_map.values()),
-                # "overall_recommendation": "Сравнение не удалось из-за ошибок при анализе отдельных товаров."
-                # })
-                return
+            if len(successful_analyses_list) < 2 and len(product_ids) >=2 :
+                 # Если изначально хотели сравнить >=2, а успешных анализов <2
+                 # TODO: Позже можно улучшить UI для показа частичных результатов.
+                 # Пока просто выдаем ошибку сравнения.
+                 # result_queue.put(("status_update", (0.9, "Недостаточно успешных анализов для сравнения.")))
+                 
+                 # Сначала отправим все индивидуальные анализы (даже с ошибками), чтобы пользователь их увидел
+                 # А затем сообщение, что общее сравнение не удалось.
+                 # Это потребует рефакторинга show_comparison_results или нового типа сообщения.
+                 # Пока что, если сравнение невозможно, выводим ошибку.
+                 
+                 # Собираем имена успешно проанализированных для сообщения
+                 # successful_names = [sa['product_name'] for sa in successful_analyses_list]
+                 # all_initial_names = [p_data['product_name'] for p_data in valid_products_for_analysis]
 
-            # 3. Генерация промпта для ОБЩИХ РЕКОМЕНДАЦИЙ и получение ответа ИИ
-            result_queue.put(("status_update", (0.9, "Подготовка общего вывода...")))
-            # Передаем successful_analyses_list в _generate_comparison_prompt
-            comparison_prompt = ReviewAnalyzer._generate_comparison_prompt(successful_analyses_list)
+                 final_error_msg_comp = f"Не удалось получить достаточно успешных индивидуальных анализов для сравнения (нужно минимум 2, получено {len(successful_analyses_list)})."
+                 # Можно добавить список товаров, которые не удалось проанализировать.
+                 
+                 # Отправляем "multi_result_partial_failure" или подобное, чтобы UI мог показать то что есть
+                 # и сообщение об ошибке сравнения.
+                 # Пока что, для простоты, отправляем общую ошибку, если сравнение не удалось.
+                 # Но лучше передать то, что есть, и флаг ошибки сравнения.
+                 # result_queue.put(("error", final_error_msg_comp)) # Старый вариант - просто ошибка
+                 
+                 # НОВЫЙ ПОДХОД: отправляем то что есть, и пусть UI решает
+                 # Но в overall_recommendation передадим сообщение об ошибке сравнения
+                 # Это позволит показать индивидуальные анализы
+                 product_names_for_title = [d["product_name"] for d in individual_analyses_list]
+                 comparison_title = f"Сравнение: {', '.join(product_names_for_title)} (неполное)"
 
-
-            if not comparison_prompt:
-                 result_queue.put(("status_update", (0.9, "Недостаточно данных для сравнения.")))
-                 result_queue.put(("error", "Недостаточно данных для создания общих рекомендаций."))
+                 result_queue.put(("multi_result", 
+                                   (comparison_title, 
+                                    individual_analyses_list, # Отправляем все, что есть
+                                    f"Сравнение не удалось: {final_error_msg_comp}")))
                  return
 
-            overall_recommendation_analysis = ReviewAnalyzer._get_ai_response(comparison_prompt)
+            # 3. Генерация промпта для ОБЩИХ РЕКОМЕНДАЦИЙ и получение ответа ИИ
+            result_queue.put(("status_update", (0.95, "Подготовка общего вывода...")))
+            # Передаем successful_analyses_list в _generate_comparison_prompt
+            comparison_prompt = ReviewAnalyzer._generate_comparison_prompt(successful_analyses_list) # Используем только успешные для общего вывода
+
+
+            if not comparison_prompt or "Ошибка: Нет данных для сравнения" in comparison_prompt or "Для сравнения нужен хотя бы два товара" in comparison_prompt :
+                 # result_queue.put(("status_update", (0.9, "Недостаточно данных для сравнения."))) # Дублирует
+                 # Эта ситуация должна быть поймана ранее проверкой len(successful_analyses_list)
+                 # Но если _generate_comparison_prompt вернул ошибку, обработаем
+                 error_msg_prompt = comparison_prompt if comparison_prompt else "Не удалось создать промпт для сравнения."
+                 result_queue.put(("error", f"Ошибка при подготовке сравнения: {error_msg_prompt}"))
+                 return
+
+            overall_recommendation_analysis = ReviewAnalyzer._get_ai_response(comparison_prompt) # Это синхронный вызов AI
             
-            product_names_for_title = [d["product_name"] for d in individual_analyses_map.values()] 
+            # Формируем заголовок из всех товаров, которые изначально пошли на анализ (даже если анализ упал)
+            product_names_for_title = [d["product_name"] for d in individual_analyses_list] 
             comparison_title = f"Сравнение: {', '.join(product_names_for_title)}"
 
             result_queue.put(("status_update", (1.0, "Завершение сравнения...")))
-            result_queue.put(("multi_result", (comparison_title, list(individual_analyses_map.values()), overall_recommendation_analysis)))
+            result_queue.put(("multi_result", (comparison_title, individual_analyses_list, overall_recommendation_analysis)))
 
         except Exception as e:
             error_details = traceback.format_exc()
-            result_queue.put(("error", f"Критическая ошибка при сравнении товаров:\\n{e}\\n\\nTraceback:\\n{error_details}"))
+            error_msg = f"Критическая ошибка при сравнении товаров:\n{type(e).__name__}: {e}"
+            print(f"MAIN.PY: {error_msg}\nTraceback:\n{error_details}")
+            result_queue.put(("error", error_msg))
+        finally:
+            # Закрываем все сессии, которые были открыты
+            # print(f"MAIN.PY: Закрытие {len(wb_instances_to_close)} сессий в perform_multiple_analysis_process")
+            loop = asyncio.new_event_loop() # Создаем новый цикл для finally блока
+            asyncio.set_event_loop(loop)
+            try:
+                for instance in wb_instances_to_close:
+                    if instance: # Дополнительная проверка
+                        # print(f"MAIN.PY: Закрываю сессию для SKU {instance.sku}")
+                        loop.run_until_complete(instance.close_session())
+            except Exception as e_close:
+                 print(f"MAIN.PY: Ошибка при закрытии сессий в perform_multiple_analysis_process: {e_close}")
+            finally:
+                 loop.close()
 
     # --- Обработка результатов (Проверка очереди из основного потока) ---
 
@@ -925,15 +1077,32 @@ class ReviewAnalyzerApp(ctk.CTk):
                 elif message_type == "multi_result":
                     self._hide_loading_overlay()
                     title, individual_results, recommendation = data
-                    self.show_comparison_results(title, individual_results, recommendation)
+                    # Передаем from_history=False, т.к. это новый анализ
+                    self.show_comparison_results(title, individual_results, recommendation, from_history=False)
                 elif message_type == "no_reviews":
                     self._hide_loading_overlay()
-                    product_name = data
-                    self.show_no_reviews(product_name)
+                    # product_name = data # data теперь содержит (product_name, message) из _get_single_analysis
+                    # Вместо этого, no_reviews теперь часть обычного "result"
+                    # Если все же придет, обработаем как ошибку или проигнорируем
+                    print(f"MAIN.PY: Получено устаревшее сообщение no_reviews: {data}")
+                    # self.show_no_reviews(product_name) # Старый вызов
+                    # Покажем как ошибку, если это случилось
+                    self.show_error_on_main_screen(f"Получен неожиданный результат 'нет отзывов' для: {data}")
                 elif message_type == "error":
                     self._hide_loading_overlay()
                     error_message = data
                     self.show_error_on_main_screen(error_message)
+                elif message_type == "error_critical_fetch":
+                    self._hide_loading_overlay()
+                    error_message = data
+                    # Эта ошибка уже достаточно конкретна
+                    self.show_error_on_main_screen(f"Ошибка получения данных товара: {error_message}")
+                elif message_type == "error_partial":
+                     self._hide_loading_overlay()
+                     error_message = data
+                     # Эта ошибка обычно уже отформатирована для показа
+                     self.show_error_on_main_screen(f"Ошибка анализатором ИИ: {error_message}")
+
                 self.update_idletasks() 
         except queue.Empty:
             pass 
